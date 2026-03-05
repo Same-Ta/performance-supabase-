@@ -1,0 +1,44 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Backend 실행 (Firebase Emulator)",
+      "skipFiles": ["<node_internals>/**"],
+      "runtimeExecutable": "firebase",
+      "runtimeArgs": ["emulators:start", "--only", "functions"],
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal",
+      "preLaunchTask": "Functions: Build",
+      "presentation": {
+        "group": "backend",
+        "order": 1
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Backend: Functions만 빌드",
+      "skipFiles": ["<node_internals>/**"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "build"],
+      "cwd": "${workspaceFolder}/backend/functions",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "backend",
+        "order": 2
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack (Backend + Agent Server)",
+      "configurations": ["Backend 실행 (Firebase Emulator)"],
+      "preLaunchTask": "Agent: Server",
+      "presentation": {
+        "order": 1
+      }
+    }
+  ]
+}

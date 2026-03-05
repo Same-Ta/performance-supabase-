@@ -1,0 +1,66 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Functions: Build",
+      "type": "shell",
+      "command": "npm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/backend/functions"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "Frontend: Dev Server",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "group": "devServers"
+      },
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "." },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "ready in"
+        }
+      }
+    },
+    {
+      "label": "Agent: Server",
+      "type": "shell",
+      "command": "python server.py",
+      "options": {
+        "cwd": "${workspaceFolder}/on-device-agent",
+        "env": { "PYTHONIOENCODING": "utf-8" }
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "group": "devServers"
+      },
+      "problemMatcher": {
+        "owner": "python",
+        "pattern": { "regexp": "." },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "ProofWork Agent Server",
+          "endsPattern": "Serving Flask app"
+        }
+      }
+    }
+  ]
+}

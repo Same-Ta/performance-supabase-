@@ -1,0 +1,15 @@
+{
+  "include": [
+    "tracker.py",
+    "metrics_engine.py",
+    "firebase_client.py",
+    "main.py"
+  ],
+  "exclude": [
+    "capture",
+    "analyzer",
+    "privacy",
+    "sync"
+  ],
+  "pythonVersion": "3.10"
+}

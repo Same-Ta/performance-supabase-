@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── 헬퍼 함수 ──────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+
+    function hasRole(role) {
+      return isAuth() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isManagerOrAbove() {
+      return hasRole('manager') || hasRole('hr_admin') || hasRole('super_admin');
+    }
+
+    function isSameTeam(teamId) {
+      return isAuth() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId == teamId;
+    }
+
+    // ─── 사용자 프로필 ───────────────────────
+    match /users/{userId} {
+      allow read: if isAuth();                          // 인증된 사용자 전체 조회 가능
+      allow create: if isOwner(userId);                 // 본인만 생성
+      allow update: if isOwner(userId) || hasRole('super_admin');
+      allow delete: if hasRole('super_admin');
+    }
+
+    // ─── 성과 메트릭 (핵심: 직원 본인만 쓰기) ─
+    match /performance_metrics/{metricId} {
+      allow read: if isOwner(resource.data.userId) || isManagerOrAbove();
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if isOwner(resource.data.userId);   // 본인만 수정(승인 전)
+      allow delete: if isOwner(resource.data.userId);   // 반려 시 삭제 가능
+    }
+
+    // ─── 데이터 검토 항목 ────────────────────
+    match /data_reviews/{reviewId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if isOwner(resource.data.userId);
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ─── 성과 리포트 ────────────────────────
+    match /performance_reports/{reportId} {
+      allow read: if isOwner(resource.data.userId) || isManagerOrAbove();
+      allow create, update: if isOwner(resource.data.userId) || hasRole('super_admin');
+      allow delete: if hasRole('super_admin');
+    }
+
+    // ─── 목표(OKR/KPI) ─────────────────────
+    match /goals/{goalId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isManagerOrAbove();
+    }
+
+    // ─── 팀 대시보드 ───────────────────────
+    match /team_dashboards/{teamId} {
+      allow read: if isAuth() && (isSameTeam(teamId) || isManagerOrAbove());
+      allow write: if false;  // Functions만 쓰기 가능 (Admin SDK)
+    }
+
+    // ─── 보상 상태 ─────────────────────────
+    match /rewards/{userId} {
+      allow read: if isOwner(userId) || isManagerOrAbove();
+      allow write: if false;  // Functions만 쓰기
+    }
+
+    // ─── 연동 설정 ─────────────────────────
+    match /integrations/{integrationId} {
+      allow read: if isAuth();
+      allow write: if isManagerOrAbove();
+    }
+
+    // ─── 알림 ──────────────────────────────
+    match /notifications/{notifId} {
+      allow read: if isOwner(resource.data.userId);
+      allow update: if isOwner(resource.data.userId);   // 읽음 처리
+      allow create: if false;  // Functions만 생성
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ─── 활동 로그 (감사 추적) ──────────────
+    match /activity_logs/{logId} {
+      allow read: if hasRole('super_admin');
+      allow write: if false;  // Functions만
+    }
+  }
+}
