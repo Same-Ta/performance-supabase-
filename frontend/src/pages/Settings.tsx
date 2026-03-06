@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useSearchParams } from 'react-router-dom';
 import {
-  Settings as SettingsIcon,
   Shield,
   Bell,
   Link as LinkIcon,
@@ -11,14 +11,38 @@ import {
   Pencil,
   X,
   Check,
+  User,
+  CreditCard,
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type Tab = 'agent' | 'privacy' | 'integrations' | 'notifications';
+type Tab = 'agent' | 'privacy' | 'integrations' | 'notifications' | 'profile' | 'subscription';
+
+const validTabs: Tab[] = ['agent', 'privacy', 'integrations', 'notifications', 'profile', 'subscription'];
 
 export default function Settings() {
   const { profile, updateProfileData } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>('agent');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') as Tab | null;
+  const [activeTab, setActiveTab] = useState<Tab>(
+    tabParam && validTabs.includes(tabParam) ? tabParam : 'agent'
+  );
+
+  // URL query param 변경 시 탭 동기화
+  useEffect(() => {
+    if (tabParam && validTabs.includes(tabParam) && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    if (tab === 'agent') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ tab });
+    }
+  };
   const [editingProfile, setEditingProfile] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDept, setEditDept] = useState('');
@@ -51,10 +75,12 @@ export default function Settings() {
   const [slackEnabled, setSlackEnabled] = useState(true);
 
   const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { id: 'profile', label: '프로필', icon: User },
     { id: 'agent', label: 'Agent 설정', icon: Monitor },
     { id: 'privacy', label: '프라이버시', icon: Shield },
     { id: 'integrations', label: '연동 관리', icon: LinkIcon },
     { id: 'notifications', label: '알림 설정', icon: Bell },
+    { id: 'subscription', label: '구독 / 플랜', icon: CreditCard },
   ];
 
   return (
@@ -73,7 +99,7 @@ export default function Settings() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={clsx(
                 'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all -mb-px',
                 activeTab === tab.id
@@ -322,20 +348,22 @@ export default function Settings() {
         </div>
       )}
 
-      {/* 저장 버튼 */}
-      <div className="flex justify-end">
-        <button className="btn-primary flex items-center gap-2">
-          <Save className="w-4 h-4" />
-          설정 저장
-        </button>
-      </div>
+      {/* 저장 버튼 (agent/privacy/integrations/notifications 탭) */}
+      {['agent', 'privacy', 'integrations', 'notifications'].includes(activeTab) && (
+        <div className="flex justify-end">
+          <button className="btn-primary flex items-center gap-2">
+            <Save className="w-4 h-4" />
+            설정 저장
+          </button>
+        </div>
+      )}
 
-      {/* 프로필 정보 (하단) */}
-      {profile && (
+      {/* 프로필 탭 */}
+      {activeTab === 'profile' && profile && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title flex items-center gap-2">
-              <SettingsIcon className="w-4 h-4" />
+              <User className="w-4 h-4" />
               프로필 정보
             </h3>
             {!editingProfile ? (
@@ -355,6 +383,18 @@ export default function Settings() {
                 취소
               </button>
             )}
+          </div>
+
+          {/* 아바타 영역 */}
+          <div className="flex items-center gap-4 mb-6 p-4 bg-gray-50 rounded-xl">
+            <div className="w-16 h-16 rounded-full bg-brand-600 text-white font-bold flex items-center justify-center text-2xl">
+              {(profile.displayName ?? 'U')[0].toUpperCase()}
+            </div>
+            <div>
+              <p className="text-lg font-bold text-gray-900">{profile.displayName || '미설정'}</p>
+              <p className="text-sm text-gray-500">{profile.email}</p>
+              <span className="mt-1 inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-100 text-brand-700 uppercase">{profile.role}</span>
+            </div>
           </div>
 
           {profileSaved && !editingProfile && (
@@ -437,6 +477,68 @@ export default function Settings() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* 구독 / 플랜 탭 */}
+      {activeTab === 'subscription' && (
+        <div className="space-y-6">
+          <div className="card">
+            <h3 className="section-title flex items-center gap-2 mb-4">
+              <CreditCard className="w-4 h-4" />
+              현재 플랜
+            </h3>
+            <div className="p-4 bg-brand-50 rounded-xl border border-brand-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-lg font-bold text-brand-700">Free Plan</p>
+                  <p className="text-sm text-gray-600 mt-1">기본 기능을 무료로 사용 중입니다.</p>
+                </div>
+                <span className="text-2xl font-bold text-brand-700">₩0<span className="text-sm font-normal text-gray-500">/월</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 className="text-sm font-bold text-gray-900 mb-4">플랜 비교</h3>
+            <div className="grid md:grid-cols-3 gap-4">
+              {[
+                { name: 'Free', price: '₩0', features: ['사용자 최대 3명', '기본 리포트', '7일 데이터 보관'], current: true },
+                { name: 'Pro', price: '₩9,900', features: ['사용자 최대 20명', '상세 리포트 & 피벗', '90일 데이터 보관', 'Jira / Slack 연동'], current: false },
+                { name: 'Enterprise', price: '문의', features: ['무제한 사용자', '커스텀 리포트', '무제한 데이터 보관', 'SSO / SAML', '전담 지원'], current: false },
+              ].map(plan => (
+                <div
+                  key={plan.name}
+                  className={clsx(
+                    'p-4 rounded-xl border-2 transition-all',
+                    plan.current ? 'border-brand-400 bg-brand-50/30' : 'border-gray-200',
+                  )}
+                >
+                  <p className="text-sm font-bold text-gray-900">{plan.name}</p>
+                  <p className="text-xl font-bold text-brand-600 mt-1">{plan.price}<span className="text-xs font-normal text-gray-500">{plan.name !== 'Enterprise' ? '/월' : ''}</span></p>
+                  <ul className="mt-3 space-y-1.5">
+                    {plan.features.map((f, i) => (
+                      <li key={i} className="text-xs text-gray-600 flex items-center gap-1.5">
+                        <Check className="w-3 h-3 text-brand-600 flex-shrink-0" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    className={clsx(
+                      'mt-4 w-full text-xs font-semibold py-2 rounded-lg transition-colors',
+                      plan.current
+                        ? 'bg-gray-100 text-gray-400 cursor-default'
+                        : 'bg-brand-600 text-white hover:bg-brand-700',
+                    )}
+                    disabled={plan.current}
+                  >
+                    {plan.current ? '현재 플랜' : '업그레이드'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

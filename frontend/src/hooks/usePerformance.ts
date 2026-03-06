@@ -22,6 +22,8 @@ import {
   getTeamDashboard,
   getRewardStatus as fetchRewardStatus,
 } from '../services/firestoreService';
+import { analyzeWorkPeriod, type DetailedAnalysis } from '../services/workAnalysisService';
+import { generateDetailedReport, type AIDetailedReport } from '../services/geminiReportService';
 
 function generateDateStr(daysAgo: number): string {
   const d = new Date();
@@ -289,4 +291,59 @@ export function useRewardStatus(userId: string) {
   }, [userId]);
 
   return { rewardStatus, tiers: REWARD_TIERS, loading };
+}
+
+// ─── Hook: 상세 업무 분석 리포트 ──────────────────────────
+export function useDetailedReport(userId: string, userName: string) {
+  const [metrics, setMetrics] = useState<PerformanceMetrics[]>([]);
+  const [analysis, setAnalysis] = useState<DetailedAnalysis | null>(null);
+  const [aiReport, setAiReport] = useState<AIDetailedReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 1) 메트릭 로딩 + 기초 분석
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchAndAnalyze() {
+      try {
+        setLoading(true);
+        const rawMetrics = await getMetricsByUser(userId, 30);
+        if (cancelled) return;
+        setMetrics(rawMetrics);
+
+        if (rawMetrics.length === 0) {
+          setAnalysis(null);
+          return;
+        }
+
+        const result = analyzeWorkPeriod(rawMetrics);
+        if (!cancelled) setAnalysis(result);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : '분석 실패');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchAndAnalyze();
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  // 2) AI 리포트 생성 (수동 트리거)
+  const generateAIReport = useCallback(async () => {
+    if (!analysis) return;
+    setAiLoading(true);
+    try {
+      const report = await generateDetailedReport(analysis, userName);
+      setAiReport(report);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'AI 리포트 생성 실패');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [analysis, userName]);
+
+  return { metrics, analysis, aiReport, loading, aiLoading, error, generateAIReport };
 }

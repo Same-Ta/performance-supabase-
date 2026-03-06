@@ -2,12 +2,31 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
-import EmployeeDashboard from './pages/EmployeeDashboard';
+
+// 기존 페이지
 import ManagerDashboard from './pages/ManagerDashboard';
 import ReviewApproval from './pages/ReviewApproval';
-import PerformanceReport from './pages/PerformanceReport';
 import Settings from './pages/Settings';
 import TeamManagement from './pages/TeamManagement';
+
+// 팀
+import TeamUsers from './pages/team/TeamUsers';
+import TimesheetApprovals from './pages/team/TimesheetApprovals';
+
+// 리포트 > 시간
+import TimeSummary from './pages/reports/TimeSummary';
+import TimeDetailed from './pages/reports/TimeDetailed';
+import TimeByDays from './pages/reports/TimeByDays';
+import TimePivot from './pages/reports/TimePivot';
+
+// 컴퓨터 활동
+import ActivitiesDashboard from './pages/activities/ActivitiesDashboard';
+import SitesAndApps from './pages/activities/SitesAndApps';
+import ActivityCategories from './pages/activities/ActivityCategories';
+import ActivitiesTimeline from './pages/activities/ActivitiesTimeline';
+import Goals from './pages/activities/Goals';
+import Efficiency from './pages/activities/Efficiency';
+import UserStatistics from './pages/activities/UserStatistics';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -36,7 +55,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   if (loading) return null;
 
   if (user) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/activities/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -56,14 +75,39 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<EmployeeDashboard />} />
+            {/* 기본 리다이렉트 */}
+            <Route index element={<Navigate to="/activities/dashboard" replace />} />
+
+            {/* 리포트 > 시간 */}
+            <Route path="reports/time/summary" element={<TimeSummary />} />
+            <Route path="reports/time/detailed" element={<TimeDetailed />} />
+            <Route path="reports/time/by-days" element={<TimeByDays />} />
+            <Route path="reports/time/pivot" element={<TimePivot />} />
+
+            {/* 컴퓨터 활동 */}
+            <Route path="activities/dashboard" element={<ActivitiesDashboard />} />
+            <Route path="activities/apps" element={<SitesAndApps />} />
+            <Route path="activities/categories" element={<ActivityCategories />} />
+            <Route path="activities/timeline" element={<ActivitiesTimeline />} />
+            <Route path="activities/goals" element={<Goals />} />
+            <Route path="activities/efficiency" element={<Efficiency />} />
+            <Route path="activities/user-stats" element={<UserStatistics />} />
+
+            {/* 기존 페이지 */}
             <Route path="manager" element={<ManagerDashboard />} />
             <Route path="review" element={<ReviewApproval />} />
-            <Route path="report" element={<PerformanceReport />} />
-            <Route path="team-invite" element={<TeamManagement />} />
-            <Route path="team" element={<TeamManagement />} />
+            <Route path="workspace" element={<TeamManagement />} />
             <Route path="settings" element={<Settings />} />
+
+            {/* 팀 */}
+            <Route path="team/users" element={<TeamUsers />} />
+            <Route path="team/timesheet-approvals" element={<TimesheetApprovals />} />
+
+            {/* 이전 경로 호환 리다이렉트 */}
+            <Route path="dashboard" element={<Navigate to="/activities/dashboard" replace />} />
+            <Route path="report" element={<Navigate to="/reports/time/summary" replace />} />
+            <Route path="team-invite" element={<Navigate to="/team/users" replace />} />
+            <Route path="team" element={<Navigate to="/team/users" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

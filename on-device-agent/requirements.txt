@@ -18,5 +18,9 @@ Pillow>=10.2.0
 # === Firebase REST API ===
 requests>=2.31.0
 
+# === 로컬 HTTP 서버 (server.py) ===
+flask>=3.0.0
+flask-cors>=4.0.0
+
 # === 시스템 트레이 아이콘 (선택) ===
 pystray>=0.19.0
