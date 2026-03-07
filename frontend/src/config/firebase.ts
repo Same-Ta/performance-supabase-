@@ -1,7 +1,7 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
-import { getFunctions, Functions } from 'firebase/functions';
+import { getFunctions, Functions, connectFunctionsEmulator } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -23,6 +23,9 @@ try {
   auth = getAuth(app);
   db = getFirestore(app);
   functions = getFunctions(app, 'asia-northeast3');
+  if (import.meta.env.DEV) {
+    connectFunctionsEmulator(functions, 'localhost', 5003);
+  }
 } catch (error) {
   console.warn('[Firebase] 초기화 실패 — 데모 모드로 동작합니다:', error);
   // 최소한의 더미 config으로 초기화하여 import 실패 방지

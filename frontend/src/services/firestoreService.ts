@@ -24,6 +24,7 @@ import type {
   EmployeeRewardStatus,
   IntegrationConfig,
   Notification,
+  NotionSettings,
 } from '../types';
 
 // ─── Collections ──────────────────────────────────────────
@@ -405,5 +406,21 @@ export async function getWorkspaceMemberMetrics(
     })
   );
   return result;
+}
+
+// ─── Notion 설정 ──────────────────────────────────────────
+const NOTION_SETTINGS = 'notion_settings';
+
+export async function getNotionSettings(userId: string): Promise<NotionSettings | null> {
+  const snap = await getDoc(doc(db, NOTION_SETTINGS, userId));
+  return snap.exists() ? (snap.data() as NotionSettings) : null;
+}
+
+export async function saveNotionSettings(userId: string, settings: NotionSettings): Promise<void> {
+  await setDoc(doc(db, NOTION_SETTINGS, userId), settings);
+}
+
+export async function deleteNotionSettings(userId: string): Promise<void> {
+  await deleteDoc(doc(db, NOTION_SETTINGS, userId));
 }
 

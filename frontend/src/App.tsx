@@ -8,6 +8,7 @@ import ManagerDashboard from './pages/ManagerDashboard';
 import ReviewApproval from './pages/ReviewApproval';
 import Settings from './pages/Settings';
 import TeamManagement from './pages/TeamManagement';
+import NotionTasks from './pages/NotionTasks';
 
 // 팀
 import TeamUsers from './pages/team/TeamUsers';
@@ -102,6 +103,9 @@ export default function App() {
             {/* 팀 */}
             <Route path="team/users" element={<TeamUsers />} />
             <Route path="team/timesheet-approvals" element={<TimesheetApprovals />} />
+
+            {/* Notion 연동 */}
+            <Route path="notion/tasks" element={<NotionTasks />} />
 
             {/* 이전 경로 호환 리다이렉트 */}
             <Route path="dashboard" element={<Navigate to="/activities/dashboard" replace />} />

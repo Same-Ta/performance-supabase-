@@ -261,6 +261,33 @@ export interface FieldMapping {
   transform?: 'none' | 'percentage' | 'hours' | 'grade';
 }
 
+// ─── Notion 연동 ──────────────────────────────────────────
+export interface NotionSettings {
+  apiKey: string;                  // Notion Integration Token
+  databaseId: string;              // Notion Database ID
+  statusProperty: string;          // Status 속성명 (예: '상태', 'Status')
+  doingValue: string;              // Doing 상태 값 (예: '진행 중', 'In Progress')
+  doneValue: string;               // Done 상태 값 (예: '완료', 'Done')
+  progressProperty: string;        // 달성률 숫자 속성명 (예: '달성률', 'Progress')
+  assigneeProperty: string;        // 담당자 속성명 (예: '담당자', 'Assignee')
+  enabled: boolean;
+}
+
+export interface NotionTask {
+  id: string;                      // Notion page ID
+  title: string;
+  status: string;
+  progress?: number;               // 0-100 달성률
+  assignee?: string;
+  url: string;
+  lastEdited?: string;
+  aiAnalysis?: {
+    estimatedProgress: number;     // AI 추정 달성률 (0-100)
+    isDone: boolean;               // 완료 여부
+    reason: string;                // 판단 근거
+  };
+}
+
 // ─── 알림/로그 ────────────────────────────────────────────
 export interface ActivityLog {
   id: string;

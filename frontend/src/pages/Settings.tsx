@@ -13,8 +13,14 @@ import {
   Check,
   User,
   CreditCard,
+  Eye,
+  EyeOff,
+  ExternalLink,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { getNotionSettings, saveNotionSettings } from '../services/firestoreService';
+import { testNotionConnection } from '../services/notionService';
+import type { NotionSettings } from '../types';
 
 type Tab = 'agent' | 'privacy' | 'integrations' | 'notifications' | 'profile' | 'subscription';
 
@@ -49,21 +55,26 @@ export default function Settings() {
   const [editPosition, setEditPosition] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+  const [profileError, setProfileError] = useState('');
 
   const startEditProfile = () => {
     setEditName(profile?.displayName ?? '');
     setEditDept(profile?.department ?? '');
     setEditPosition(profile?.position ?? '');
     setProfileSaved(false);
+    setProfileError('');
     setEditingProfile(true);
   };
 
   const saveProfile = async () => {
     setProfileSaving(true);
+    setProfileError('');
     try {
       await updateProfileData({ displayName: editName, department: editDept, position: editPosition });
       setProfileSaved(true);
       setEditingProfile(false);
+    } catch {
+      setProfileError('저장 중 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setProfileSaving(false);
     }
@@ -73,6 +84,75 @@ export default function Settings() {
   const [privacyMode, setPrivacyMode] = useState<'strict' | 'balanced'>('strict');
   const [jiraEnabled, setJiraEnabled] = useState(false);
   const [slackEnabled, setSlackEnabled] = useState(true);
+
+  // ─── Notion 연동 상태 ───────────────────────────────────
+  const DEFAULT_NOTION: NotionSettings = {
+    apiKey: '',
+    databaseId: '',
+    statusProperty: '상태',
+    doingValue: '진행 중',
+    doneValue: '완료',
+    progressProperty: '달성률',
+    assigneeProperty: '담당자',
+    enabled: false,
+  };
+  const [notion, setNotion] = useState<NotionSettings>(DEFAULT_NOTION);
+  const [notionLoading, setNotionLoading] = useState(false);
+  const [notionSaving, setNotionSaving] = useState(false);
+  const [notionSaved, setNotionSaved] = useState(false);
+  const [notionError, setNotionError] = useState('');
+  const [notionTesting, setNotionTesting] = useState(false);
+  const [notionTestResult, setNotionTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const handleNotionTest = async () => {
+    if (!notion.apiKey.trim() || !notion.databaseId.trim()) {
+      setNotionTestResult({ ok: false, message: 'API 키와 Database ID를 먼저 입력해주세요.' });
+      return;
+    }
+    setNotionTesting(true);
+    setNotionTestResult(null);
+    try {
+      const result = await testNotionConnection(notion.apiKey, notion.databaseId);
+      setNotionTestResult(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '연결 테스트 실패';
+      setNotionTestResult({ ok: false, message: msg });
+    } finally {
+      setNotionTesting(false);
+    }
+  };
+  const [showApiKey, setShowApiKey] = useState(false);
+
+  // integrations 탭 진입 시 저장된 Notion 설정 로드
+  useEffect(() => {
+    if (activeTab !== 'integrations' || !profile?.uid) return;
+    setNotionLoading(true);
+    getNotionSettings(profile.uid)
+      .then((settings) => {
+        if (settings) setNotion(settings);
+      })
+      .catch(() => {})
+      .finally(() => setNotionLoading(false));
+  }, [activeTab, profile?.uid]);
+
+  const handleNotionSave = async () => {
+    if (!profile?.uid) return;
+    if (!notion.apiKey.trim() || !notion.databaseId.trim()) {
+      setNotionError('API 키와 데이터베이스 ID는 필수입니다.');
+      return;
+    }
+    setNotionError('');
+    setNotionSaving(true);
+    try {
+      await saveNotionSettings(profile.uid, { ...notion, enabled: true });
+      setNotionSaved(true);
+      setTimeout(() => setNotionSaved(false), 3000);
+    } catch {
+      setNotionError('저장 중 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setNotionSaving(false);
+    }
+  };
 
   const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'profile', label: '프로필', icon: User },
@@ -301,19 +381,213 @@ export default function Settings() {
             </div>
 
             {/* Notion */}
-            <div className="p-4 border border-gray-200 rounded-xl flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-lg">
-                  📝
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="p-4 flex items-center justify-between bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-lg">
+                    📝
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Notion</p>
+                    <p className="text-xs text-gray-500">진행 중 태스크 조회 및 AI 달성률 업데이트</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold">Notion</p>
-                  <p className="text-xs text-gray-500">성과 데이터 자동 기록</p>
-                </div>
+                {notion.enabled && (
+                  <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full font-medium">연동됨</span>
+                )}
               </div>
-              <span className="text-xs text-gray-400 px-3 py-1 bg-gray-100 rounded-full">
-                출시 예정
-              </span>
+
+              {notionLoading ? (
+                <div className="p-6 flex items-center justify-center">
+                  <RefreshCw className="w-5 h-5 animate-spin text-gray-400" />
+                </div>
+              ) : (
+                <div className="p-4 space-y-4">
+                  {/* 가이드 링크 */}
+                  <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-700 leading-relaxed">
+                    <p className="font-semibold mb-1">🔑 Notion Integration Token 발급 방법</p>
+                    <ol className="list-decimal list-inside space-y-0.5 text-blue-600">
+                      <li>notion.so/my-integrations 접속 → 새 통합 생성</li>
+                      <li>통합 토큰(secret_...) 복사</li>
+                      <li>연동할 Notion DB 페이지 → ··· 메뉴 → 연결 → 통합 추가</li>
+                      <li>DB URL에서 database ID 복사 (32자리 hex 값)</li>
+                    </ol>
+                    <a
+                      href="https://developers.notion.com/docs/create-a-notion-integration"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 font-medium hover:underline"
+                    >
+                      공식 가이드 보기 <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  {/* API Key */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">
+                      Integration Token <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showApiKey ? 'text' : 'password'}
+                        value={notion.apiKey}
+                        onChange={(e) => setNotion(prev => ({ ...prev, apiKey: e.target.value }))}
+                        placeholder="secret_xxxxxxxxxxxxxxxxxxxxxxxx"
+                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600"
+                      >
+                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Database ID */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-1">
+                      Database ID 또는 Notion URL <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={notion.databaseId}
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        // URL 붙여넣기 시 ID 자동 추출
+                        // notion.so/.../{32자리hex}?v= 또는 notion.so/.../{uuid}?v=
+                        const urlMatch = val.match(/([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})/i);
+                        const extracted = urlMatch ? urlMatch[1] : val;
+                        setNotion(prev => ({ ...prev, databaseId: extracted }));
+                        setNotionTestResult(null);
+                      }}
+                      placeholder="URL 전체 붙여넣기 또는 32자리 ID 입력"
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Notion DB 페이지 URL을 그대로 붙여넣으면 ID를 자동으로 추출합니다.<br />
+                      현재 입력된 ID: <code className="bg-gray-100 px-1 rounded">{notion.databaseId || '(없음)'}</code>
+                    </p>
+                  </div>
+
+                  {/* 고급 설정 (속성명) */}
+                  <details className="group">
+                    <summary className="text-xs font-medium text-gray-600 cursor-pointer hover:text-gray-900 list-none flex items-center gap-1">
+                      <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+                      고급 설정 (DB 속성명 커스터마이즈)
+                    </summary>
+                    <div className="mt-3 grid sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">상태 속성명</label>
+                        <input
+                          type="text"
+                          value={notion.statusProperty}
+                          onChange={(e) => setNotion(prev => ({ ...prev, statusProperty: e.target.value }))}
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">진행 중 값</label>
+                        <input
+                          type="text"
+                          value={notion.doingValue}
+                          onChange={(e) => setNotion(prev => ({ ...prev, doingValue: e.target.value }))}
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">완료 값</label>
+                        <input
+                          type="text"
+                          value={notion.doneValue}
+                          onChange={(e) => setNotion(prev => ({ ...prev, doneValue: e.target.value }))}
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">달성률 속성명 (Number)</label>
+                        <input
+                          type="text"
+                          value={notion.progressProperty}
+                          onChange={(e) => setNotion(prev => ({ ...prev, progressProperty: e.target.value }))}
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">담당자 속성명</label>
+                        <input
+                          type="text"
+                          value={notion.assigneeProperty}
+                          onChange={(e) => setNotion(prev => ({ ...prev, assigneeProperty: e.target.value }))}
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
+                      </div>
+                    </div>
+                  </details>
+
+                  {/* 연결 테스트 결과 */}
+                  {notionTestResult && (
+                    <div className={`text-xs rounded-lg px-3 py-2 border ${
+                      notionTestResult.ok
+                        ? 'text-green-700 bg-green-50 border-green-200'
+                        : 'text-red-700 bg-red-50 border-red-200'
+                    }`}>
+                      <span className="font-semibold">{notionTestResult.ok ? '✅ ' : '❌ '}</span>
+                      {notionTestResult.message}
+                    </div>
+                  )}
+
+                  {notionError && (
+                    <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      {notionError}
+                    </p>
+                  )}
+
+                  {notionSaved && (
+                    <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                      <Check className="w-3.5 h-3.5" />
+                      Notion 연동 설정이 저장되었습니다.
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1">
+                    <a
+                      href="/notion/tasks"
+                      className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Notion 태스크 보기
+                    </a>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleNotionTest}
+                        disabled={notionTesting}
+                        className="btn-ghost flex items-center gap-2 text-sm border border-gray-300"
+                      >
+                        {notionTesting ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Check className="w-4 h-4" />
+                        )}
+                        {notionTesting ? '테스트 중...' : '연결 테스트'}
+                      </button>
+                      <button
+                        onClick={handleNotionSave}
+                        disabled={notionSaving}
+                        className="btn-primary flex items-center gap-2 text-sm"
+                      >
+                        {notionSaving ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Save className="w-4 h-4" />
+                        )}
+                          {notionSaving ? '저장 중...' : 'Notion 저장'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -348,8 +622,8 @@ export default function Settings() {
         </div>
       )}
 
-      {/* 저장 버튼 (agent/privacy/integrations/notifications 탭) */}
-      {['agent', 'privacy', 'integrations', 'notifications'].includes(activeTab) && (
+      {/* 저장 버튼 (agent/privacy/notifications 탭) */}
+      {['agent', 'privacy', 'notifications'].includes(activeTab) && (
         <div className="flex justify-end">
           <button className="btn-primary flex items-center gap-2">
             <Save className="w-4 h-4" />
@@ -401,6 +675,12 @@ export default function Settings() {
             <div className="mb-3 flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
               <Check className="w-3.5 h-3.5" />
               프로필이 저장되었습니다.
+            </div>
+          )}
+
+          {profileError && (
+            <div className="mb-3 flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {profileError}
             </div>
           )}
 

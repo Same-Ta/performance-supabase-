@@ -152,19 +152,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProfileData = async (data: Partial<Pick<UserProfile, 'displayName' | 'department' | 'position'>>) => {
+    // 로컬 상태 먼저 낙관적 업데이트 (UI 즉시 반영)
+    setProfile((prev) => prev ? { ...prev, ...data } : prev);
+
     // 데모 모드: 로컬 상태만 업데이트
     if (!user || user.uid.startsWith('demo-')) {
-      setProfile((prev) => prev ? { ...prev, ...data } : prev);
       return;
     }
-    // Firebase Auth displayName 업데이트
-    if (data.displayName && auth.currentUser) {
-      await firebaseUpdateProfile(auth.currentUser, { displayName: data.displayName });
+    try {
+      // Firebase Auth displayName 업데이트
+      if (data.displayName && auth.currentUser) {
+        await firebaseUpdateProfile(auth.currentUser, { displayName: data.displayName });
+      }
+      // Firestore 문서 업데이트
+      await updateDoc(doc(db, 'users', user.uid), data);
+    } catch (error) {
+      // Firestore 업데이트 실패해도 로컬 상태는 유지 (이미 위에서 갱신됨)
+      console.warn('[AuthContext] 프로필 Firestore 업데이트 실패:', error);
     }
-    // Firestore 문서 업데이트
-    await updateDoc(doc(db, 'users', user.uid), data);
-    // 로컬 상태 즉시 갱신
-    setProfile((prev) => prev ? { ...prev, ...data } : prev);
   };
 
   const signOut = async () => {

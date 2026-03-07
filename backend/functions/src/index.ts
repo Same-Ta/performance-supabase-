@@ -6,12 +6,15 @@
  * 2. 보상 티어 자동 산출 및 업데이트
  * 3. Jira/Slack 연동 웹훅
  * 4. 정기 리포트 생성 트리거
+ * 5. Notion 태스크 연동 프록시
  */
 
 import * as admin from "firebase-admin";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onRequest } from "firebase-functions/v2/https";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { Client as NotionClient } from "@notionhq/client";
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -406,5 +409,262 @@ export const mapMetricsToGoals = onRequest(
     });
 
     res.json({ alignments });
+  }
+);
+
+// ============================================================
+// 6. Notion 태스크 연동 프록시 (onCall - 인증 필수)
+// ============================================================
+export const notionProxy = onCall(
+  {
+    region: "asia-northeast3",
+    cors: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "https://performance-fefc0.web.app",
+      "https://performance-fefc0.firebaseapp.com",
+    ],
+  },
+  async (request) => {
+    // 인증 확인
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+    }
+
+    const { action, apiKey, databaseId, pageId, statusProperty, doingValue,
+            doneValue, progressProperty, assigneeProperty, userName,
+            progress, isDone } = request.data as {
+      action: "getDoingTasks" | "updateTask" | "testConnection";
+      apiKey: string;
+      databaseId?: string;
+      pageId?: string;
+      statusProperty?: string;
+      doingValue?: string;
+      doneValue?: string;
+      progressProperty?: string;
+      assigneeProperty?: string;
+      userName?: string;
+      progress?: number;
+      isDone?: boolean;
+    };
+
+    if (!apiKey) {
+      throw new HttpsError("invalid-argument", "Notion API 키가 필요합니다.");
+    }
+
+    const notion = new NotionClient({ auth: apiKey.trim() });
+
+    // ── 연결 테스트 ────────────────────────────────────────
+    if (action === "testConnection") {
+      // 1단계: API Key 유효성 (사용자 정보 조회)
+      let botName = "";
+      try {
+        const me = await notion.users.me({});
+        botName = (me as { name?: string }).name ?? "unknown";
+      } catch (err) {
+        const e = err as { code?: string; message?: string };
+        throw new HttpsError("unauthenticated",
+          `API Key가 유효하지 않습니다. Integration Token(secret_...)을 확인하세요.\n(오류: ${e.message})`);
+      }
+
+      // 2단계: DB 접근 권한 확인
+      if (!databaseId) {
+        return { ok: true, apiKey: true, database: false, botName, dbTitle: "",
+          message: "API Key는 유효합니다. Database ID를 입력해주세요." };
+      }
+      const cleanId = databaseId.trim().replace(/-/g, "");
+      try {
+        const db = await notion.databases.retrieve({ database_id: cleanId });
+        const dbTitle = (db as { title?: Array<{ plain_text?: string }> })
+          .title?.[0]?.plain_text ?? "(제목 없음)";
+        return { ok: true, apiKey: true, database: true, botName, dbTitle,
+          message: `연결 성공! DB "${dbTitle}"에 접근 가능합니다.` };
+      } catch (err) {
+        const e = err as { code?: string; message?: string };
+        if (e.code === "object_not_found" || e.code === "unauthorized") {
+          throw new HttpsError("not-found",
+            `API Key는 유효하지만 DB에 접근할 수 없습니다.\n` +
+            `Notion DB 페이지에서 ··· → 연결(Connections) → 인테그레이션 추가를 완료했는지 확인하세요.\n` +
+            `(DB ID: ${cleanId})`);
+        }
+        throw new HttpsError("internal", `DB 조회 오류: ${e.message}`);
+      }
+    }
+
+    // ── 진행 중 태스크 조회 ────────────────────────────────
+    if (action === "getDoingTasks") {
+      if (!databaseId) {
+        throw new HttpsError("invalid-argument", "databaseId가 필요합니다.");
+      }
+
+      const statusProp = statusProperty || "상태";
+      const doingVal = doingValue || "진행 중";
+      const assigneeProp = assigneeProperty || "담당자";
+      const cleanDatabaseId = databaseId.trim().replace(/-/g, "");
+
+      console.log("[notionProxy] getDoingTasks", {
+        databaseId: cleanDatabaseId,
+        statusProp,
+        doingVal,
+        assigneeProp,
+        apiKeyPrefix: apiKey.slice(0, 10),
+      });
+
+      // 전체 페이지를 가져온 뒤 코드에서 상태 필터링 (API 필터 타입/값 불일치 문제 방지)
+      let results: unknown[] = [];
+      let hasMore = true;
+      let cursor: string | undefined = undefined;
+
+      while (hasMore) {
+        try {
+          const response = await notion.databases.query({
+            database_id: cleanDatabaseId,
+            start_cursor: cursor,
+            page_size: 100,
+          });
+          results = results.concat(response.results);
+          hasMore = response.has_more;
+          cursor = response.next_cursor ?? undefined;
+        } catch (err) {
+          const notionErr = err as { code?: string; message?: string };
+          console.error("[notionProxy] DB 조회 실패:", notionErr.code, notionErr.message);
+          if (notionErr.code === "object_not_found" || notionErr.code === "unauthorized") {
+            throw new HttpsError("not-found",
+              `Notion DB에 접근할 수 없습니다. DB ID와 인테그레이션 연결을 확인하세요.\n` +
+              `(DB ID: ${cleanDatabaseId}, 오류: ${notionErr.message})`);
+          }
+          throw new HttpsError("internal", `Notion API 오류: ${notionErr.message}`);
+        }
+      }
+
+      // 페이지 데이터 정규화
+      const allTasks = results.map((page: unknown) => {
+        const p = page as {
+          id: string;
+          url: string;
+          last_edited_time: string;
+          properties: Record<string, {
+            type: string;
+            title?: Array<{ plain_text: string }>;
+            rich_text?: Array<{ plain_text: string }>;
+            status?: { name: string };
+            select?: { name: string };
+            number?: number;
+            people?: Array<{ name?: string }>;
+          }>;
+        };
+
+        // 제목 추출 (title 타입 속성)
+        const titleProp = Object.values(p.properties).find((v) => v.type === "title");
+        const title = titleProp?.title?.[0]?.plain_text ?? "(제목 없음)";
+
+        // Status 추출
+        const statusPropData = p.properties[statusProp];
+        const status = statusPropData?.status?.name ?? statusPropData?.select?.name ?? "";
+
+        // 달성률 추출
+        const progProp = progressProperty ? p.properties[progressProperty] : undefined;
+        const progressVal = progProp?.number ?? undefined;
+
+        // 담당자 추출 (People / Select / rich_text 타입 모두 대응)
+        const assigneePropData = p.properties[assigneeProp];
+        let assignee: string | undefined;
+        if (assigneePropData?.type === "people" && assigneePropData.people?.length) {
+          assignee = assigneePropData.people[0].name;
+        } else if (assigneePropData?.type === "select" && assigneePropData.select?.name) {
+          assignee = assigneePropData.select.name;
+        } else if (assigneePropData?.type === "rich_text" && assigneePropData.rich_text?.length) {
+          assignee = assigneePropData.rich_text[0].plain_text;
+        }
+
+        return {
+          id: p.id,
+          title,
+          status,
+          progress: progressVal,
+          assignee,
+          url: p.url,
+          lastEdited: p.last_edited_time,
+        };
+      }).filter((t) => t !== null) as Array<{
+        id: string; title: string; status: string; progress?: number;
+        assignee?: string; url: string; lastEdited: string;
+      }>;
+
+      // 실제 DB에 존재하는 status 값 목록 수집 (힌트용)
+      const normalize = (s: string) => s.trim().toLowerCase();
+      const allStatuses = [...new Set(allTasks.map((t) => t.status).filter(Boolean))];
+
+      // doingVal로 필터링
+      const doingTasks = allTasks.filter((t) => normalize(t.status) === normalize(doingVal));
+
+      // 담당자 필터 후 최종 결과
+      const tasks = doingTasks.filter((t) => {
+        if (!userName) return true;
+        if (!t.assignee) return true;
+        const normUser = userName.trim();
+        const normAssignee = t.assignee.trim();
+        return normAssignee.includes(normUser) || normUser.includes(normAssignee);
+      });
+
+      console.log("[notionProxy] 전체:", allTasks.length, "/ doing:", doingTasks.length,
+        "/ 담당자 필터 후:", tasks.length, "/ 존재하는 상태값:", allStatuses);
+
+      if (tasks.length === 0 && doingTasks.length === 0 && allStatuses.length > 0) {
+        // doingVal이 DB 실제 값과 불일치 → 힌트 포함해서 반환
+        return {
+          tasks: [],
+          hint: `설정의 "진행 중 값"이 "${doingVal}"로 설정되어 있지만, DB에 존재하는 상태 값은 [${allStatuses.join(", ")}]입니다. 설정에서 값을 수정해주세요.`,
+        };
+      }
+
+      return { tasks };
+    }
+
+    // ── 태스크 달성률/상태 업데이트 ───────────────────────
+    if (action === "updateTask") {
+      if (!pageId) {
+        throw new HttpsError("invalid-argument", "pageId가 필요합니다.");
+      }
+
+      const statusProp = statusProperty || "상태";
+      const doneVal = doneValue || "완료";
+      const progProp = progressProperty || "달성률";
+
+      const properties: Record<string, unknown> = {};
+
+      // 달성률 속성 업데이트 (Number 타입)
+      if (progress !== undefined) {
+        properties[progProp] = { number: progress };
+      }
+
+      // 완료 시 Status 변경
+      if (isDone) {
+        // Status 타입 시도
+        properties[statusProp] = { status: { name: doneVal } };
+      }
+
+      try {
+        await notion.pages.update({
+          page_id: pageId,
+          properties: properties as Parameters<typeof notion.pages.update>[0]["properties"],
+        });
+      } catch {
+        // Status 타입 실패 시 Select 타입으로 재시도
+        if (isDone) {
+          properties[statusProp] = { select: { name: doneVal } };
+          await notion.pages.update({
+            page_id: pageId,
+            properties: properties as Parameters<typeof notion.pages.update>[0]["properties"],
+          });
+        } else {
+          throw new HttpsError("internal", "Notion 업데이트 실패");
+        }
+      }
+
+      return { success: true };
+    }
+
+    throw new HttpsError("invalid-argument", "지원하지 않는 action입니다.");
   }
 );

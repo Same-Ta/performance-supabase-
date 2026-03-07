@@ -122,6 +122,9 @@ const navItems: NavItem[] = [
     ],
   },
 
+  // ── Notion 연동 ──────────────
+  { kind: 'leaf', to: '/notion/tasks', icon: CheckSquare, label: 'Notion 태스크', roles: allRoles },
+
   // ── 기타 ───────────────────
   { kind: 'leaf', to: '/manager', icon: Users, label: '팀 관리 (매니저)', roles: managerUp },
   { kind: 'leaf', to: '/review', icon: ClipboardCheck, label: '데이터 검토', roles: allRoles },
