@@ -204,7 +204,16 @@ export const aggregateTeamDashboard = onSchedule(
 // 3. Jira 연동 웹훅 (On-Demand)
 // ============================================================
 export const syncJira = onRequest(
-  { region: "asia-northeast3", cors: true },
+  { 
+    region: "asia-northeast3", 
+    cors: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://performance-fefc0.web.app',
+      'https://performance-fefc0.firebaseapp.com',
+      'https://performance-one-plum.vercel.app'
+    ]
+  },
   async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).send("Method not allowed");
@@ -279,7 +288,16 @@ export const syncJira = onRequest(
 // 4. Slack 알림 웹훅
 // ============================================================
 export const sendSlackNotification = onRequest(
-  { region: "asia-northeast3", cors: true },
+  { 
+    region: "asia-northeast3", 
+    cors: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://performance-fefc0.web.app',
+      'https://performance-fefc0.firebaseapp.com',
+      'https://performance-one-plum.vercel.app'
+    ]
+  },
   async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).send("Method not allowed");
@@ -339,7 +357,16 @@ export const sendSlackNotification = onRequest(
 // 5. KPI/OKR 자동 매핑 엔드포인트
 // ============================================================
 export const mapMetricsToGoals = onRequest(
-  { region: "asia-northeast3", cors: true },
+  { 
+    region: "asia-northeast3", 
+    cors: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://performance-fefc0.web.app',
+      'https://performance-fefc0.firebaseapp.com',
+      'https://performance-one-plum.vercel.app'
+    ]
+  },
   async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).send("Method not allowed");
@@ -417,10 +444,25 @@ export const mapMetricsToGoals = onRequest(
 export const notionProxy = onRequest(
   { region: "asia-northeast3" },
   async (req, res) => {
-    // CORS 헤더 설정
-    res.set('Access-Control-Allow-Origin', '*');
+    // CORS 헤더 설정 (로컬 + 배포 환경)
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://performance-fefc0.web.app',
+      'https://performance-fefc0.firebaseapp.com',
+      'https://performance-one-plum.vercel.app'
+    ];
+    
+    const origin = req.headers.origin || '';
+    if (allowedOrigins.includes(origin)) {
+      res.set('Access-Control-Allow-Origin', origin);
+    } else {
+      res.set('Access-Control-Allow-Origin', allowedOrigins[0]);
+    }
+    
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.set('Access-Control-Allow-Credentials', 'true');
     res.set('Access-Control-Max-Age', '3600');
 
     // Preflight 요청 처리

@@ -30,7 +30,15 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 app = Flask(__name__)
-CORS(app)  # 프론트엔드 localhost:3000 / localhost:5173 허용
+
+# CORS 설정 - 로컬 및 배포 환경 허용
+CORS(app, origins=[
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://performance-fefc0.web.app",
+    "https://performance-fefc0.firebaseapp.com",
+    "https://performance-one-plum.vercel.app"
+])
 
 # ─── 전역 상태 (thread-safe) ─────────────────────────────────
 _lock = threading.Lock()

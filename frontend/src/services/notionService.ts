@@ -7,8 +7,8 @@ import { auth } from '../config/firebase';
 import type { NotionSettings, NotionTask } from '../types';
 
 const FUNCTIONS_URL = import.meta.env.DEV 
-  ? 'http://localhost:5003/snippet-b24e9/asia-northeast3/notionProxy'
-  : 'https://asia-northeast3-snippet-b24e9.cloudfunctions.net/notionProxy';
+  ? 'http://localhost:5003/performance-fefc0/asia-northeast3/notionProxy'
+  : 'https://asia-northeast3-performance-fefc0.cloudfunctions.net/notionProxy';
 
 async function callNotionProxy(data: Record<string, unknown>): Promise<any> {
   const user = auth.currentUser;
