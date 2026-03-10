@@ -18,6 +18,9 @@ Pillow>=10.2.0
 # === Firebase REST API ===
 requests>=2.31.0
 
+# === AI 화면 분석 (Gemini Vision) ===
+google-generativeai>=0.8.0
+
 # === 로컬 HTTP 서버 (server.py) ===
 flask>=3.0.0
 flask-cors>=4.0.0

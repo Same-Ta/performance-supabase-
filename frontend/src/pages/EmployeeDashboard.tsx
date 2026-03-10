@@ -5,6 +5,7 @@ import GoalAlignmentChart from '../components/charts/GoalAlignmentChart';
 import EfficiencyChart from '../components/charts/EfficiencyChart';
 import AgentControlPanel from '../components/agent/AgentControlPanel';
 import ActivityTimeline from '../components/dashboard/ActivityTimeline';
+import WorkContextTimeline from '../components/dashboard/WorkContextTimeline';
 import ProductivityOverview from '../components/dashboard/ProductivityOverview';
 
 function NoDataCard() {
@@ -131,6 +132,12 @@ export default function EmployeeDashboard() {
           softwareData={today?.softwareUsage || []}
         />
       </div>
+
+      {/* AI 업무 컨텍스트 타임라인 (화면 분석 기반) */}
+      <WorkContextTimeline
+        timeline={today?.timeline ?? []}
+        isLive={!!user}
+      />
 
       {/* 오늘 하루 전체 활동 타임라인 */}
       <ActivityTimeline

@@ -121,6 +121,18 @@ interface AgentLiveStats {
   deepFocusMinutes: number;
   topCategory: string;
   categoryBreakdown: Record<string, number>;
+  screenAnalysis?: {
+    hasContext: boolean;
+    currentWork?: string;
+    currentSummary?: string;
+    currentInference?: string;
+    currentCategory?: string;
+    currentApp?: string;
+    blockDurationMinutes?: number;
+    totalAnalyses?: number;
+    totalBlocks?: number;
+    narrative?: string;
+  };
 }
 
 interface SessionSummary {
@@ -131,6 +143,8 @@ interface SessionSummary {
   deepFocusMinutes: number;
   contextSwitches: number;
   topCategory: string;
+  workNarrative?: string;
+  screenAnalysisCount?: number;
 }
 
 interface Props {
@@ -369,7 +383,19 @@ export default function AgentControlPanel({ onSessionEnd }: Props) {
       if (!res.ok) throw new Error(data.error || '에이전트 종료 실패');
       setAgentState('idle');
       setLiveStats(null);
-      if (data.summary) setLastSession(data.summary as SessionSummary);
+      if (data.metrics) {
+        setLastSession({
+          score: data.metrics.overallScore,
+          focusScore: data.metrics.focusScore,
+          efficiencyScore: data.metrics.efficiencyScore,
+          activeMinutes: data.metrics.activeWorkMinutes,
+          deepFocusMinutes: data.metrics.deepFocusMinutes,
+          contextSwitches: data.metrics.contextSwitchCount,
+          topCategory: '',
+          workNarrative: data.metrics.workNarrative,
+          screenAnalysisCount: data.metrics.screenAnalysisCount,
+        });
+      }
       onSessionEnd?.();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '알 수 없는 오류');
@@ -455,6 +481,28 @@ export default function AgentControlPanel({ onSessionEnd }: Props) {
           </div>
         )}
 
+        {/* AI 화면 분석 실시간 컨텍스트 */}
+        {isTracking && liveStats && 'screenAnalysis' in liveStats && (liveStats as AgentLiveStats).screenAnalysis?.hasContext && (
+          <div className="bg-gradient-to-r from-brand-50 to-blue-50 rounded-xl px-4 py-3 border border-brand-100">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] font-semibold text-brand-600 uppercase tracking-wider">AI 화면 분석</span>
+              <span className="text-[10px] text-brand-400">
+                {(liveStats as AgentLiveStats).screenAnalysis?.currentApp} · {(liveStats as AgentLiveStats).screenAnalysis?.blockDurationMinutes}분째
+              </span>
+            </div>
+            {(liveStats as AgentLiveStats).screenAnalysis?.currentSummary && (
+              <p className="text-xs text-gray-700">
+                {(liveStats as AgentLiveStats).screenAnalysis?.currentSummary}
+              </p>
+            )}
+            {(liveStats as AgentLiveStats).screenAnalysis?.currentInference && (
+              <p className="text-xs text-brand-600 font-medium mt-1">
+                {(liveStats as AgentLiveStats).screenAnalysis?.currentInference}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* 직전 세션 결과 */}
         {lastSession && (
           <div className="bg-brand-50 rounded-xl px-4 py-3 border border-brand-100">
@@ -464,8 +512,16 @@ export default function AgentControlPanel({ onSessionEnd }: Props) {
               <div className="text-xs text-brand-600 space-y-0.5">
                 <p>집중 {lastSession.deepFocusMinutes}분 · 활성 {lastSession.activeMinutes}분</p>
                 <p>컨텍스트 전환 {lastSession.contextSwitches}회 · <span className="capitalize">{lastSession.topCategory}</span></p>
+                {lastSession.screenAnalysisCount != null && lastSession.screenAnalysisCount > 0 && (
+                  <p className="text-brand-500">AI 화면 분석 {lastSession.screenAnalysisCount}회 수행</p>
+                )}
               </div>
             </div>
+            {lastSession.workNarrative && (
+              <p className="text-xs text-brand-600 mt-2 pt-2 border-t border-brand-100">
+                {lastSession.workNarrative}
+              </p>
+            )}
           </div>
         )}
 

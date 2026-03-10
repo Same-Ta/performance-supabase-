@@ -73,7 +73,17 @@ def status():
     return jsonify({"running": running, "stats": stats})
 
 
-@app.post("/start")
+@app.get("/context")
+def context():
+    """현재 AI 화면 분석 컨텍스트 (실시간)"""
+    with _lock:
+        tracker = _state["tracker"]
+    if not tracker:
+        return jsonify({"hasContext": False})
+    stats = tracker.get_live_stats()
+    screen_data = stats.get("screenAnalysis", {"hasContext": False})
+    analysis_stats = stats.get("screenAnalysisStats", {})
+    return jsonify({**screen_data, "analysisStats": analysis_stats})
 def start():
     data = request.get_json(silent=True) or {}
     uid = data.get("uid", "")
@@ -151,6 +161,10 @@ def stop():
         "aiSummary": metrics.get("aiSummary", ""),
         "reward": metrics.get("reward", {}),
         "submitted": submitted,
+        # AI 화면 분석 컨텍스트
+        "workNarrative": metrics.get("workNarrative", ""),
+        "screenAnalysisCount": metrics.get("screenAnalysisCount", 0),
+        "timeline": metrics.get("timeline", []),
     }
     return jsonify({"ok": True, "metrics": summary})
 

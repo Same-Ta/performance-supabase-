@@ -109,11 +109,22 @@ def compute_metrics(session: SessionData) -> dict:
     # 타임라인에서 주요 활동 추출 (상위 3개, 분 기준)
     timeline = getattr(session, "timeline", [])
     top_segments = sorted(timeline, key=lambda x: x.get("durationMinutes", 0), reverse=True)[:3]
-    activity_examples = "・".join(
-        f"{seg['description']}" for seg in top_segments
-    ) if top_segments else ""
 
-    if activity_examples:
+    # AI 화면 분석 기반 내러티브가 있으면 우선 사용
+    work_narrative = getattr(session, "work_narrative", "")
+    screen_contexts = getattr(session, "screen_contexts", [])
+
+    if work_narrative:
+        # AI 화면 분석으로 생성된 구체적 업무 내러티브 사용
+        ai_summary = (
+            f"오늘은 총 {active_minutes:.0f}분 활성 작업을 수행했습니다. "
+            f"업무 흐름: {work_narrative}. "
+            f"딥 포커스 {deep_focus_minutes:.0f}분, 컨텍스트 전환 {session.context_switches}회."
+        )
+    elif top_segments:
+        activity_examples = "・".join(
+            f"{seg['description']}" for seg in top_segments
+        )
         ai_summary = (
             f"오늘은 총 {active_minutes:.0f}분 활성 작업을 수행했습니다. "
             f"주요 활동: {activity_examples}. "
@@ -137,6 +148,18 @@ def compute_metrics(session: SessionData) -> dict:
     productive_pct = int((productive_sec / max(active_seconds, 1)) * 100)
     if productive_pct >= 70:
         key_achievements.append(f"생산성 도구 활용률 {productive_pct}% 달성")
+
+    # AI 화면 분석 기반 성과 추가
+    if screen_contexts:
+        unique_inferences = []
+        seen = set()
+        for sc in screen_contexts:
+            inf = sc.get("inference", "")
+            if inf and inf not in seen:
+                seen.add(inf)
+                unique_inferences.append(inf)
+        if unique_inferences:
+            key_achievements.append(f"AI 분석 감지 업무: {unique_inferences[0]}")
 
     date_str = datetime.now().strftime("%Y-%m-%d")
     session_start_time = datetime.fromtimestamp(session.start_time).strftime("%H:%M")
@@ -173,6 +196,11 @@ def compute_metrics(session: SessionData) -> dict:
         "timeline": timeline,
         "sessionStartTime": session_start_time,
         "sessionEndTime": session_end_time,
+
+        # AI 화면 분석 컨텍스트
+        "workNarrative": work_narrative,
+        "screenContexts": screen_contexts[-20:] if screen_contexts else [],  # 최근 20개
+        "screenAnalysisCount": len(screen_contexts),
 
         "reward": {
             "tier": tier_id,

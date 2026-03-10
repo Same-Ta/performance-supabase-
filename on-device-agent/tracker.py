@@ -1,8 +1,11 @@
 """
-ProofWork — 실시간 윈도우 활동 추적기
+ProofWork — 실시간 윈도우 활동 추적기 + AI 화면 분석
 
 win32gui로 활성 윈도우 타이틀을 읽어서
 앱별/카테고리별 사용시간을 실시간 집계합니다.
+
+화면 분석이 활성화되면 Gemini Vision API로 주기적으로
+화면 내용을 분석하여 구체적인 업무 컨텍스트를 추출합니다.
 """
 
 import time
@@ -11,9 +14,20 @@ import ctypes.wintypes
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Optional
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+# 화면 분석 모듈 (선택 의존)
+try:
+    from capture.screen_capture import ScreenCapture, secure_delete_frame
+    from analyzer.screen_analyzer import ScreenAnalyzer
+    from analyzer.work_context import WorkContextTracker
+    _SCREEN_ANALYSIS_AVAILABLE = True
+except ImportError:
+    _SCREEN_ANALYSIS_AVAILABLE = False
+    logger.info("screen_analysis_modules_not_available")
 
 # ─── 소프트웨어 카테고리 맵 ───────────────────────────
 SOFTWARE_CATEGORIES: dict[str, list[str]] = {
@@ -99,16 +113,53 @@ class SessionData:
     _seg_app: str = ""             # 현재 세그먼트 앱 이름
     _seg_category: str = ""        # 현재 세그먼트 카테고리
 
+    # AI 화면 분석 컨텍스트
+    screen_contexts: list = field(default_factory=list)     # ScreenContext 결과 리스트
+    work_narrative: str = ""        # AI 기반 업무 내러티브
+    category_context_map: dict = field(default_factory=dict) # 카테고리별 AI 컨텍스트
+
 
 class WindowTracker:
-    """Windows 활성 윈도우 제목 추적기"""
+    """Windows 활성 윈도우 제목 추적기 + AI 화면 분석"""
 
-    def __init__(self, poll_interval: float = 3.0):
+    def __init__(self, poll_interval: float = 3.0, enable_screen_analysis: bool = True):
         self.poll_interval = poll_interval
         self._session: SessionData | None = None
         self._running = False
         self._prev_title = ""
         self._idle_threshold = 300  # 5분 동안 같은 타이틀 = idle 의심
+
+        # AI 화면 분석 모듈
+        self._screen_capture: Optional[object] = None
+        self._screen_analyzer: Optional[object] = None
+        self._work_context: Optional[object] = None
+        self._screen_analysis_enabled = enable_screen_analysis and _SCREEN_ANALYSIS_AVAILABLE
+
+        if self._screen_analysis_enabled:
+            self._init_screen_analysis()
+
+    def _init_screen_analysis(self):
+        """화면 분석 모듈 초기화"""
+        try:
+            from config import config
+            if not config.screen_analysis_enabled:
+                logger.info("screen_analysis_disabled_by_config")
+                self._screen_analysis_enabled = False
+                return
+
+            self._screen_capture = ScreenCapture()
+            self._screen_analyzer = ScreenAnalyzer()
+            self._work_context = WorkContextTracker()
+
+            if self._screen_analyzer.initialize():
+                self._screen_capture.start()
+                logger.info("screen_analysis_initialized")
+            else:
+                logger.info("screen_analysis_not_available_api_key_or_deps")
+                self._screen_analysis_enabled = False
+        except Exception as e:
+            logger.warning("screen_analysis_init_failed", error=str(e))
+            self._screen_analysis_enabled = False
 
     def start_session(self, session_id: str, user_id: str) -> SessionData:
         self._session = SessionData(session_id=session_id, user_id=user_id)
@@ -125,6 +176,20 @@ class WindowTracker:
             self._close_focus_period()
             # 마지막 타임라인 세기먼트 마감
             self._close_timeline_segment()
+
+            # AI 화면 분석 마감
+            if self._screen_analysis_enabled and self._work_context:
+                ai_timeline = self._work_context.finalize_all()
+                if ai_timeline:
+                    # AI 타임라인이 있으면 기존 타임라인을 대체 (더 상세함)
+                    self._session.timeline = ai_timeline
+                self._session.work_narrative = self._work_context.get_work_narrative()
+                self._session.category_context_map = self._work_context.get_category_summary()
+
+            # 화면 캡처 종료
+            if self._screen_capture:
+                self._screen_capture.stop()
+
         return self._session
 
     def get_live_stats(self) -> dict:
@@ -136,7 +201,8 @@ class WindowTracker:
         cat_secs: dict = dict(s.category_seconds)
         total_active = sum(cat_secs.values())
         top_cat = max(cat_secs, key=lambda k: cat_secs[k]) if cat_secs else "idle"
-        return {
+
+        stats = {
             "elapsedMinutes": round(elapsed / 60, 1),
             "activeMinutes": round(total_active / 60, 1),
             "idleMinutes": round(s.idle_seconds / 60, 1),
@@ -147,6 +213,14 @@ class WindowTracker:
                 k: round(v / 60, 1) for k, v in cat_secs.items()
             },
         }
+
+        # AI 화면 분석 실시간 컨텍스트 추가
+        if self._screen_analysis_enabled and self._work_context:
+            stats["screenAnalysis"] = self._work_context.get_live_context()
+        if self._screen_analyzer:
+            stats["screenAnalysisStats"] = self._screen_analyzer.get_stats()
+
+        return stats
 
     @property
     def is_running(self) -> bool:
@@ -202,11 +276,59 @@ class WindowTracker:
             else:
                 # 동일 앱 계속 중: 타이틀만 업데이트 (변경될 수 있음)
                 self._session._seg_title = title
+
+            # AI 화면 분석 (주기적)
+            self._try_screen_analysis(title, app_name)
         self._session.total_records += 1
         self._prev_title = title
         return record
 
     # ─── Private ────────────────────────────
+
+    def _try_screen_analysis(self, title: str, app_name: str):
+        """
+        AI 화면 분석 시도 (주기적)
+
+        ScreenAnalyzer.should_analyze()가 True일 때만 실행되므로
+        설정된 주기(기본 30초)보다 자주 호출해도 안전합니다.
+        """
+        if not self._screen_analysis_enabled:
+            return
+        if not self._screen_analyzer or not self._screen_analyzer.should_analyze():
+            return
+        if not self._screen_capture or not self._screen_capture.is_running:
+            return
+
+        try:
+            frame = self._screen_capture.capture_frame()
+            if frame is None:
+                return
+
+            # Gemini Vision API로 화면 분석
+            ctx = self._screen_analyzer.analyze_screen(
+                frame=frame,
+                window_title=title,
+                app_name=app_name,
+            )
+
+            # 프레임 보안 삭제 (Privacy-by-Design)
+            secure_delete_frame(frame)
+
+            if ctx and self._work_context:
+                self._work_context.process_context(ctx)
+                # 세션에 컨텍스트 기록
+                if self._session:
+                    self._session.screen_contexts.append({
+                        "timestamp": ctx.timestamp,
+                        "summary": ctx.screen_summary,
+                        "inference": ctx.work_inference,
+                        "category": ctx.work_category,
+                        "confidence": ctx.confidence,
+                        "app": ctx.app_name,
+                    })
+
+        except Exception as e:
+            logger.warning("screen_analysis_poll_error", error=str(e))
 
     @staticmethod
     def _get_foreground_title() -> str:

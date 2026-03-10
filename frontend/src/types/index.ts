@@ -73,6 +73,11 @@ export interface PerformanceMetrics {
   sessionStartTime?: string;      // 'HH:mm' 형식
   sessionEndTime?: string;        // 'HH:mm' 형식
 
+  // AI 화면 분석 데이터
+  workNarrative?: string;         // AI 기반 업무 내러티브
+  screenContexts?: ScreenAnalysisContext[]; // 화면 분석 이력
+  screenAnalysisCount?: number;   // 총 화면 분석 횟수
+
   // 메타
   createdAt: string;
   approvedAt?: string;
@@ -95,6 +100,37 @@ export interface ActivitySegment {
   category: SoftwareCategory | 'meeting' | 'idle' | 'other';
   durationMinutes: number;        // 지속 시간(분)
   description: string;            // 구체적 업무 설명 (예: 'VS Code - main.py 편집')
+
+  // AI 화면 분석 확장 필드
+  screenSummary?: string;         // AI 화면 요약 (예: 'React 컴포넌트의 상태 관리 로직을 수정하고 있다')
+  workInference?: string;         // AI 업무 추론 (예: '사용자 인증 플로우 에러 핸들링 개선 작업 중')
+  detectedElements?: string[];    // 감지된 UI 요소들
+  analysisCount?: number;         // 이 구간에 수행된 AI 분석 횟수
+}
+
+// AI 화면 분석 컨텍스트 (On-Device Agent → Cloud)
+export interface ScreenAnalysisContext {
+  timestamp: number;
+  summary: string;                // 화면 요약
+  inference: string;              // 업무 추론
+  category: string;               // 업무 카테고리
+  confidence: number;             // 분석 신뢰도
+  app: string;                    // 앱 이름
+}
+
+// 실시간 화면 분석 상태 (Agent /context 엔드포인트)
+export interface LiveScreenContext {
+  hasContext: boolean;
+  currentWork?: string;           // 현재 업무 설명
+  currentSummary?: string;        // 현재 화면 요약
+  currentInference?: string;      // 현재 업무 추론
+  currentCategory?: string;       // 현재 카테고리
+  currentApp?: string;            // 현재 앱
+  blockDurationMinutes?: number;  // 현재 블록 지속 시간
+  totalAnalyses?: number;         // 총 분석 횟수
+  totalBlocks?: number;           // 총 업무 블록 수
+  narrative?: string;             // 업무 내러티브
+  categorySummary?: Record<string, number>; // 카테고리별 시간
 }
 
 export type SoftwareCategory =

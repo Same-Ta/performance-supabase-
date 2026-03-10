@@ -42,6 +42,13 @@ class AgentConfig(BaseModel):
         "은행", "banking", "카드",
     ]
 
+    # ─── AI 화면 분석 (Gemini Vision) ───────
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    gemini_vision_model: str = "gemini-2.0-flash"  # 멀티모달 비전 모델
+    screen_analysis_interval_sec: float = 30.0      # 화면 AI 분석 주기 (초)
+    screen_analysis_max_dim: int = 1024              # 서브이미지 최대 치수 (px)
+    screen_analysis_enabled: bool = True             # 화면 분석 활성화 여부
+
     # ─── Firebase 동기화 ────────────────────
     firebase_credentials_path: str = str(BASE_DIR / "service-account-key.json")
     firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID", "")
