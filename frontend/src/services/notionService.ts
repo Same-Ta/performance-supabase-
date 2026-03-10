@@ -1,35 +1,29 @@
 /**
  * Notion 연동 서비스
- * Firebase Functions의 notionProxy를 통해 Notion API를 호출합니다.
+ * Supabase Edge Function의 notion-proxy를 통해 Notion API를 호출합니다.
  */
 
-import { auth } from '../config/firebase';
+import { supabase, EDGE_FUNCTIONS_URL } from '../config/supabase';
 import type { NotionSettings, NotionTask } from '../types';
 
-const FUNCTIONS_URL = import.meta.env.DEV 
-  ? 'http://localhost:5003/performance-fefc0/asia-northeast3/notionProxy'
-  : 'https://asia-northeast3-performance-fefc0.cloudfunctions.net/notionProxy';
-
 async function callNotionProxy(data: Record<string, unknown>): Promise<any> {
-  const user = auth.currentUser;
-  if (!user) {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session) {
     throw new Error('로그인이 필요합니다.');
   }
 
-  const token = await user.getIdToken();
-  
-  const response = await fetch(FUNCTIONS_URL, {
+  const response = await fetch(`${EDGE_FUNCTIONS_URL}/notion-proxy`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${session.access_token}`,
     },
     body: JSON.stringify(data),
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || '요청 실패');
+    const err = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(err.error || '요청 실패');
   }
 
   return response.json();

@@ -1,18 +1,20 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile as firebaseUpdateProfile,
-  signOut as firebaseSignOut,
-  User,
-} from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+﻿import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from '../config/supabase';
 import type { UserProfile, UserRole } from '../types';
 
+// Firebase의 user.uid 를 유지하기 위한 호환 타입
+export interface AppUser extends User {
+  uid: string; // User.id 의 별칭 (하위 호환)
+}
+
+function toAppUser(u: User | null): AppUser | null {
+  if (!u) return null;
+  return { ...u, uid: u.id } as AppUser;
+}
+
 interface AuthContextType {
-  user: User | null;
+  user: AppUser | null;
   profile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
@@ -24,7 +26,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// 데모용 프로필 생성
 function createDemoProfile(role: UserRole): UserProfile {
   const profiles: Record<UserRole, UserProfile> = {
     employee: {
@@ -78,109 +79,129 @@ function createDemoProfile(role: UserRole): UserProfile {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        try {
-          const docRef = doc(db, 'users', firebaseUser.uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            setProfile(docSnap.data() as UserProfile);
-          } else {
-            // 첫 로그인 시 기본 프로필 생성
-            const newProfile: UserProfile = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              displayName: firebaseUser.displayName || '사용자',
-              role: 'employee',
-              department: '',
-              teamId: '',
-              position: '',
-              joinDate: new Date().toISOString().split('T')[0],
-              agentConnected: false,
-            };
-            await setDoc(docRef, newProfile);
-            setProfile(newProfile);
-          }
-        } catch {
-          // Firebase 미연결 시 데모 모드
-          setProfile(createDemoProfile('employee'));
-        }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const appUser = toAppUser(session?.user ?? null);
+      setUser(appUser);
+      if (appUser) {
+        loadProfile(appUser.id);
       } else {
-        setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    // Firebase 미연결 시 즉시 로딩 해제
-    const timeout = setTimeout(() => {
-      setLoading(false);
-    }, 3000);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const appUser = toAppUser(session?.user ?? null);
+      setUser(appUser);
+      if (appUser) {
+        await loadProfile(appUser.id);
+      } else {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
+
+    const timeout = setTimeout(() => setLoading(false), 3000);
 
     return () => {
-      unsubscribe();
+      subscription.unsubscribe();
       clearTimeout(timeout);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function loadProfile(uid: string) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('uid', uid)
+        .single();
+
+      if (error || !data) {
+        const { data: authUser } = await supabase.auth.getUser();
+        const newProfile: UserProfile = {
+          uid,
+          email: authUser.user?.email || '',
+          displayName: authUser.user?.user_metadata?.display_name || '사용자',
+          role: 'employee',
+          department: '',
+          teamId: '',
+          position: '',
+          joinDate: new Date().toISOString().split('T')[0],
+          agentConnected: false,
+        };
+        await supabase.from('profiles').upsert(newProfile);
+        setProfile(newProfile);
+      } else {
+        setProfile(data as UserProfile);
+      }
+    } catch {
+      setProfile(createDemoProfile('employee'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
   };
 
   const signUp = async (email: string, password: string, displayName: string, department: string) => {
-    const credential = await createUserWithEmailAndPassword(auth, email, password);
-    await firebaseUpdateProfile(credential.user, { displayName });
-    const newProfile: UserProfile = {
-      uid: credential.user.uid,
+    const { data, error } = await supabase.auth.signUp({
       email,
-      displayName,
-      role: 'employee',
-      department,
-      teamId: '',
-      position: '',
-      joinDate: new Date().toISOString().split('T')[0],
-      agentConnected: false,
-    };
-    await setDoc(doc(db, 'users', credential.user.uid), newProfile);
-    setProfile(newProfile);
+      password,
+      options: { data: { display_name: displayName } },
+    });
+    if (error) throw error;
+    if (data.user) {
+      const newProfile: UserProfile = {
+        uid: data.user.id,
+        email,
+        displayName,
+        role: 'employee',
+        department,
+        teamId: '',
+        position: '',
+        joinDate: new Date().toISOString().split('T')[0],
+        agentConnected: false,
+      };
+      await supabase.from('profiles').upsert(newProfile);
+      setProfile(newProfile);
+    }
   };
 
   const updateProfileData = async (data: Partial<Pick<UserProfile, 'displayName' | 'department' | 'position'>>) => {
-    // 로컬 상태 먼저 낙관적 업데이트 (UI 즉시 반영)
     setProfile((prev) => prev ? { ...prev, ...data } : prev);
-
-    // 데모 모드: 로컬 상태만 업데이트
-    if (!user || user.uid.startsWith('demo-')) {
-      return;
-    }
+    if (!user || user.uid.startsWith('demo-')) return;
     try {
-      // Firebase Auth displayName 업데이트
-      if (data.displayName && auth.currentUser) {
-        await firebaseUpdateProfile(auth.currentUser, { displayName: data.displayName });
+      if (data.displayName) {
+        await supabase.auth.updateUser({ data: { display_name: data.displayName } });
       }
-      // Firestore 문서 업데이트
-      await updateDoc(doc(db, 'users', user.uid), data);
+      await supabase.from('profiles').update(data).eq('uid', user.id);
     } catch (error) {
-      // Firestore 업데이트 실패해도 로컬 상태는 유지 (이미 위에서 갱신됨)
-      console.warn('[AuthContext] 프로필 Firestore 업데이트 실패:', error);
+      console.warn('[AuthContext] 프로필 업데이트 실패:', error);
     }
   };
 
   const signOut = async () => {
-    await firebaseSignOut(auth);
+    await supabase.auth.signOut();
     setProfile(null);
   };
 
   const demoLogin = (role: UserRole) => {
     const demoProfile = createDemoProfile(role);
     setProfile(demoProfile);
-    setUser({ uid: demoProfile.uid } as User);
+    setUser({
+      id: demoProfile.uid,
+      uid: demoProfile.uid,
+      email: demoProfile.email,
+    } as AppUser);
     setLoading(false);
   };
 

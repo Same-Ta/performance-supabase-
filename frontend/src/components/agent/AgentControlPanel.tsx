@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../config/supabase';
 import { ChevronDown } from 'lucide-react';
 import { browserTracker } from '../../services/browserTracker';
 import type { BrowserLiveStats } from '../../services/browserTracker';
@@ -242,7 +243,8 @@ export default function AgentControlPanel({ onSessionEnd }: Props) {
 
     // 로컬 에이전트 모드
     try {
-      const idToken = await user.getIdToken(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const idToken = session?.access_token ?? '';
       const res = await fetch(`${AGENT_URL}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

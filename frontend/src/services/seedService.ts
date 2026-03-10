@@ -1,10 +1,9 @@
 /**
  * 개발/테스트용 시드 데이터 생성기
- * Firestore에 샘플 성과 데이터를 직접 심어줍니다.
+ * Supabase에 샘플 성과 데이터를 직접 심어줍니다.
  * Settings 페이지에서만 호출할 것.
  */
-import { setDoc, doc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { supabase } from '../config/supabase';
 import type { PerformanceMetrics, DataReviewItem } from '../types';
 
 function dateStr(daysAgo: number): string {
@@ -83,14 +82,33 @@ export async function seedTestData(userId: string): Promise<{ metrics: number; r
   const reviewDays = [0, 1, 2];
   const reviewList = reviewDays.map((d) => makeReview(metricsList[d]));
 
-  await Promise.all([
-    ...metricsList.map((m) =>
-      setDoc(doc(db, 'performance_metrics', m.id), m)
-    ),
-    ...reviewList.map((r) =>
-      setDoc(doc(db, 'data_reviews', r.id), r)
-    ),
-  ]);
+  // performance_metrics 삽입
+  const dbMetrics = metricsList.map((m) => ({
+    id: m.id,
+    user_id: m.userId,
+    date: m.date,
+    session_id: m.sessionId,
+    status: m.status,
+    total_work_minutes: m.totalWorkMinutes,
+    active_work_minutes: m.activeWorkMinutes,
+    focus_score: m.focusScore,
+    efficiency_score: m.efficiencyScore,
+    goal_alignment_score: m.goalAlignmentScore,
+    output_score: m.outputScore,
+    context_switch_count: m.contextSwitchCount,
+    context_switch_rate: m.contextSwitchRate,
+    input_density: m.inputDensity,
+    deep_focus_minutes: m.deepFocusMinutes,
+    software_usage: m.softwareUsage,
+    ai_summary: m.aiSummary,
+    key_achievements: m.keyAchievements,
+    suggested_improvements: m.suggestedImprovements,
+    created_at: m.createdAt,
+    submitted_at: m.submittedAt,
+  }));
+
+  await supabase.from('performance_metrics').upsert(dbMetrics);
 
   return { metrics: metricsList.length, reviews: reviewList.length };
 }
+

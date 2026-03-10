@@ -11,14 +11,14 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "firebase": "^11.1.0",
+    "@supabase/supabase-js": "^2.99.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.0",
-    "recharts": "^2.15.0",
-    "date-fns": "^4.1.0",
-    "clsx": "^2.1.1"
+    "recharts": "^2.15.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
