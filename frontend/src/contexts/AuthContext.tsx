@@ -84,9 +84,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // onAuthStateChange 가 INITIAL_SESSION 이벤트로 초기 세션을 즉시 전달하므로
-    // getSession() 중복 호출 없이 이것만 사용
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    let isMounted = true;
+
+    // ① getSession(): localStorage에서 즉시 읽으므로 네트워크 불요 → 빠름
+    //    배포 환경에서 onAuthStateChange INITIAL_SESSION이 늦게/미발화 시에도 안전하게 loading 해제
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
+      const appUser = toAppUser(session?.user ?? null);
+      setUser(appUser);
+      if (appUser) {
+        loadProfile(appUser.id);   // loading은 loadProfile finally에서 해제
+      } else {
+        setProfile(null);
+        setLoading(false);
+      }
+    }).catch(() => {
+      if (isMounted) setLoading(false);
+    });
+
+    // ② onAuthStateChange: 로그인/로그아웃/토큰 갱신 등 이후 변경만 처리
+    //    INITIAL_SESSION은 getSession()으로 이미 처리했으므로 skip
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      if (event === 'INITIAL_SESSION') return; // getSession()이 처리함
       const appUser = toAppUser(session?.user ?? null);
       setUser(appUser);
       if (appUser) {
@@ -97,10 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // Supabase 연결 실패 / 환경변수 미설정 대비 안전망 (2초)
-    const timeout = setTimeout(() => setLoading(false), 2000);
+    // ③ 극단적 안전망: getSession/loadProfile 모두 실패해도 1초 후 loading 해제
+    const timeout = setTimeout(() => { if (isMounted) setLoading(false); }, 1000);
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
       clearTimeout(timeout);
     };
