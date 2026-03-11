@@ -196,9 +196,11 @@ export default function AgentControlPanel({ onSessionEnd }: Props) {
 
   useEffect(() => {
     pollStatus();
-    const id = setInterval(pollStatus, POLL_INTERVAL);
+    // 오프라인 시 10초, 연결 시 3초 폴링 (콘솔 스팸 최소화)
+    const interval = agentState === 'offline' ? 10000 : POLL_INTERVAL;
+    const id = setInterval(pollStatus, interval);
     return () => clearInterval(id);
-  }, [pollStatus]);
+  }, [pollStatus, agentState]);
 
   // ── 브라우저 모드 실시간 stats 업데이트 ───────────────────
   useEffect(() => {

@@ -43,7 +43,19 @@ export function useEmployeeDashboard(userId: string) {
   const refetch = () => setFetchTick(t => t + 1);
 
   useEffect(() => {
+    // userId가 없으면 데이터 없음 상태로 즉시 종료
+    if (!userId) {
+      setLoading(false);
+      setMetrics([]);
+      return;
+    }
+
     let cancelled = false;
+
+    // 8초 안전망: Supabase 콜드스타트/네트워크 지연으로 무한 로딩 방지
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 8000);
 
     async function fetchData() {
       try {
@@ -56,12 +68,16 @@ export function useEmployeeDashboard(userId: string) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : '데이터 로딩 실패');
       } finally {
+        clearTimeout(safetyTimer);
         if (!cancelled) setLoading(false);
       }
     }
 
     fetchData();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+    };
   }, [userId, fetchTick]);
 
   const averages = calculatePeriodAverages(metrics);
