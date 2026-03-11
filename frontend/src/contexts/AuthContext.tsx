@@ -84,8 +84,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (data) {
-        // 정상 조회
-        setProfile(data as UserProfile);
+        let profileData = data as UserProfile;
+
+        // 이전 버그로 프로필이 기본값('사용자')으로 덮어써진 경우 Auth 메타데이터로 복구
+        if (profileData.displayName === '사용자' || !profileData.displayName) {
+          try {
+            const { data: authUser } = await supabase.auth.getUser();
+            const realName = authUser.user?.user_metadata?.display_name;
+            const realEmail = authUser.user?.email;
+            if (realName && realName !== '사용자') {
+              const patch: Partial<UserProfile> = { displayName: realName };
+              if (realEmail && !profileData.email) patch.email = realEmail;
+              await supabase.from('profiles').update(patch).eq('uid', uid);
+              profileData = { ...profileData, ...patch };
+            }
+          } catch {
+            // 복구 실패해도 기존 프로필 사용
+          }
+        }
+
+        setProfile(profileData);
         return;
       }
 
