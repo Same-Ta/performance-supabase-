@@ -1,7 +1,13 @@
 /**
- * ProofWork - Firebase Cloud Functions
+ * [DEPRECATED] ProofWork - Firebase Cloud Functions
  *
- * 핵심 서버사이드 로직:
+ * ** 이 파일은 더 이상 사용되지 않습니다. **
+ * Supabase로 마이그레이션 완료되었습니다.
+ * - 데이터 CRUD: PostgREST (frontend에서 직접 호출)
+ * - Edge Functions: backend/supabase/functions/ 참고
+ * - 인증: Supabase Auth
+ *
+ * 기존 핵심 서버사이드 로직:
  * 1. 성과 데이터 제출(submit) 시 팀 대시보드 자동 집계
  * 2. 보상 티어 자동 산출 및 업데이트
  * 3. Jira/Slack 연동 웹훅

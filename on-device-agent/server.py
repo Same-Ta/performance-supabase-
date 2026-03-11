@@ -35,8 +35,6 @@ app = Flask(__name__)
 CORS(app, origins=[
     "http://localhost:3000",
     "http://localhost:5173",
-    "https://performance-fefc0.web.app",
-    "https://performance-fefc0.firebaseapp.com",
     "https://performance-one-plum.vercel.app"
 ])
 
@@ -61,7 +59,7 @@ def _tracking_loop():
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True, "version": "1.0"})
+    return jsonify({"ok": True, "version": "1.0.0", "running": _state["running"]})
 
 
 @app.get("/status")
@@ -84,6 +82,9 @@ def context():
     screen_data = stats.get("screenAnalysis", {"hasContext": False})
     analysis_stats = stats.get("screenAnalysisStats", {})
     return jsonify({**screen_data, "analysisStats": analysis_stats})
+
+
+@app.post("/start")
 def start():
     data = request.get_json(silent=True) or {}
     uid = data.get("uid", "")
@@ -94,12 +95,12 @@ def start():
         if _state["running"]:
             return jsonify({"ok": True, "message": "이미 실행 중"})
 
-        from firebase_client import FirebaseClient
+        from supabase_client import SupabaseClient
         from tracker import WindowTracker
 
-        client = FirebaseClient()
+        client = SupabaseClient()
         if id_token and uid:
-            # 프론트엔드에서 이미 로그인된 Firebase 토큰 사용
+            # 프론트엔드에서 이미 로그인된 Supabase 토큰 사용
             client.set_external_token(uid, id_token)
         elif not client.is_authenticated:
             return jsonify({"ok": False, "message": "인증 정보 없음. 대시보드에서 로그인 후 시작하세요."}), 401
@@ -169,7 +170,72 @@ def stop():
     return jsonify({"ok": True, "metrics": summary})
 
 
-if __name__ == "__main__":
+# ─── Windows 시작 프로그램 관리 ────────────────────────────────
+
+_STARTUP_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+_STARTUP_NAME = "ProofWorkAgent"
+
+
+def _get_exe_path() -> str:
+    """실행중인 파일 경로 반환 (PyInstaller exe vs. py 실행 모두 대응)"""
+    if getattr(sys, "frozen", False):
+        return sys.argv[0]
+    return sys.executable
+
+
+@app.get("/startup/status")
+def startup_status():
+    """Windows 시작 프로그램 등록 여부 확인"""
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _STARTUP_KEY, 0, winreg.KEY_READ)
+        try:
+            winreg.QueryValueEx(key, _STARTUP_NAME)
+            registered = True
+        except FileNotFoundError:
+            registered = False
+        winreg.CloseKey(key)
+        return jsonify({"registered": registered})
+    except ImportError:
+        return jsonify({"registered": False, "error": "Windows전용 기능입니다."})
+    except Exception as e:
+        return jsonify({"registered": False, "error": str(e)})
+
+
+@app.post("/startup/register")
+def startup_register():
+    """Windows 시작 프로그램에 Agent 등록"""
+    try:
+        import winreg
+        exe = _get_exe_path()
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _STARTUP_KEY, 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, _STARTUP_NAME, 0, winreg.REG_SZ, f'"{exe}"')
+        winreg.CloseKey(key)
+        logger.info("startup_registered", exe=exe)
+        return jsonify({"ok": True})
+    except ImportError:
+        return jsonify({"ok": False, "message": "Windows 전용 기능입니다."}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "message": str(e)}), 500
+
+
+@app.delete("/startup/register")
+def startup_unregister():
+    """Windows 시작 프로그램에서 Agent 제거"""
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _STARTUP_KEY, 0, winreg.KEY_SET_VALUE)
+        try:
+            winreg.DeleteValue(key, _STARTUP_NAME)
+        except FileNotFoundError:
+            pass
+        winreg.CloseKey(key)
+        logger.info("startup_unregistered")
+        return jsonify({"ok": True})
+    except ImportError:
+        return jsonify({"ok": False, "message": "Windows 전용 기능입니다."}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "message": str(e)}), 500
     import os
     port = int(os.environ.get("PORT", 5001))
     host = os.environ.get("HOST", "0.0.0.0" if os.environ.get("PORT") else "localhost")

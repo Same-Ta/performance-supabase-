@@ -15,7 +15,7 @@ pywin32>=306
 mss>=9.0.0
 Pillow>=10.2.0
 
-# === Firebase REST API ===
+# === Supabase (REST API via requests) ===
 requests>=2.31.0
 
 # === AI 화면 분석 (Gemini Vision) ===

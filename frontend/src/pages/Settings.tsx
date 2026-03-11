@@ -5,6 +5,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
+  Download,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { getNotionSettings, saveNotionSettings } from '../services/firestoreService';
@@ -14,6 +15,11 @@ import type { NotionSettings } from '../types';
 type Tab = 'agent' | 'privacy' | 'integrations' | 'notifications' | 'profile' | 'subscription';
 
 const validTabs: Tab[] = ['agent', 'privacy', 'integrations', 'notifications', 'profile', 'subscription'];
+
+const AGENT_URL = 'http://localhost:5001';
+const AGENT_DOWNLOAD_URL =
+  (import.meta.env.VITE_AGENT_DOWNLOAD_URL as string | undefined) ??
+  'https://github.com/raonpl/proofwork-agent/releases/latest/download/ProofWorkAgent.exe';
 
 export default function Settings() {
   const { profile, updateProfileData } = useAuth();
@@ -73,6 +79,53 @@ export default function Settings() {
   const [privacyMode, setPrivacyMode] = useState<'strict' | 'balanced'>('strict');
   const [jiraEnabled, setJiraEnabled] = useState(false);
   const [slackEnabled, setSlackEnabled] = useState(true);
+
+  // ─── Agent 상태 ────────────────────────────────────────────
+  const [agentOnline, setAgentOnline] = useState(false);
+  const [agentVersion, setAgentVersion] = useState('');
+  const [startupRegistered, setStartupRegistered] = useState(false);
+  const [startupToggling, setStartupToggling] = useState(false);
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch(`${AGENT_URL}/health`, { signal: AbortSignal.timeout(2000) });
+        if (res.ok) {
+          const data = await res.json();
+          setAgentOnline(true);
+          setAgentVersion(data.version ?? '');
+        } else {
+          setAgentOnline(false);
+        }
+      } catch {
+        setAgentOnline(false);
+      }
+    };
+    check();
+    const id = setInterval(check, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!agentOnline) return;
+    fetch(`${AGENT_URL}/startup/status`, { signal: AbortSignal.timeout(2000) })
+      .then((r) => r.json())
+      .then((data) => setStartupRegistered(data.registered ?? false))
+      .catch(() => {});
+  }, [agentOnline]);
+
+  const handleStartupToggle = async () => {
+    setStartupToggling(true);
+    try {
+      const method = startupRegistered ? 'DELETE' : 'POST';
+      const res = await fetch(`${AGENT_URL}/startup/register`, { method });
+      if (res.ok) setStartupRegistered(!startupRegistered);
+    } catch {
+      // silently ignore
+    } finally {
+      setStartupToggling(false);
+    }
+  };
 
   // ─── Notion 연동 상태 ───────────────────────────────────
   const DEFAULT_NOTION: NotionSettings = {
@@ -181,63 +234,155 @@ export default function Settings() {
 
       {/* Agent 설정 */}
       {activeTab === 'agent' && (
-        <div className="card space-y-6">
-          <div>
-            <h3 className="text-sm font-bold text-gray-900 mb-1">캡처 간격 (초)</h3>
-            <p className="text-xs text-gray-500 mb-3">
-              화면 스크린샷 캡처 주기입니다. 높을수록 리소스를 덜 사용합니다.
-            </p>
-            <div className="flex items-center gap-4">
-              <input
-                type="range"
-                min={1}
-                max={30}
-                value={captureInterval}
-                onChange={(e) => setCaptureInterval(Number(e.target.value))}
-                className="flex-1"
-              />
-              <span className="text-sm font-bold text-brand-600 w-12 text-right">
-                {captureInterval}초
+        <div className="space-y-4">
+          {/* ── Agent 상태 · 설치 카드 ── */}
+          <div className="card space-y-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-bold text-gray-900">On-Device Agent</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  로컬 PC에서 실행되는 프라이버시 보호 추적 엔진
+                </p>
+              </div>
+              <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                agentOnline ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  agentOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+                }`} />
+                {agentOnline ? `연결됨 v${agentVersion}` : '오프라인'}
               </span>
             </div>
+
+            {/* 미설치 / 오프라인 */}
+            {!agentOnline && (
+              <div className="space-y-4">
+                <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <p className="text-xs font-semibold text-gray-700 mb-3">설치 방법</p>
+                  <ol className="space-y-3">
+                    <li className="flex items-start gap-3">
+                      <span className="shrink-0 w-5 h-5 bg-brand-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">1</span>
+                      <div>
+                        <p className="text-xs font-medium text-gray-800">프로그램 다운로드</p>
+                        <p className="text-xs text-gray-500 mt-0.5">아래 버튼을 눌러 <strong>ProofWorkAgent.exe</strong>를 다운로드하세요.</p>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="shrink-0 w-5 h-5 bg-brand-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">2</span>
+                      <div>
+                        <p className="text-xs font-medium text-gray-800">프로그램 실행</p>
+                        <p className="text-xs text-gray-500 mt-0.5">다운로드한 exe를 실행하면 배경에서 로컬 서버가 자동 시작됩니다.</p>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="shrink-0 w-5 h-5 bg-brand-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">3</span>
+                      <div>
+                        <p className="text-xs font-medium text-gray-800">추적 시작</p>
+                        <p className="text-xs text-gray-500 mt-0.5">대시보드로 돌아가 [추적 시작] 버튼을 누르면 자동으로 연결됩니다.</p>
+                      </div>
+                    </li>
+                  </ol>
+                </div>
+                <a
+                  href={AGENT_DOWNLOAD_URL}
+                  download="ProofWorkAgent.exe"
+                  className="btn-primary flex items-center justify-center gap-2 w-full"
+                >
+                  <Download className="w-4 h-4" />
+                  ProofWorkAgent.exe 다운로드
+                </a>
+              </div>
+            )}
+
+            {/* 연결된 상태 */}
+            {agentOnline && (
+              <div className="space-y-3">
+                <div className="p-3 bg-green-50 rounded-xl border border-green-200">
+                  <p className="text-xs font-medium text-green-700">
+                    ✓ On-Device Agent가 정상 연결되었습니다. 대시보드에서 [추적 시작]을 눌러 AI 화면 분석 추적을 시작하세요.
+                  </p>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">PC 시작 시 자동 실행</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Windows 로그인 시 에이전트가 자동으로 시작됩니다.</p>
+                  </div>
+                  <button
+                    onClick={handleStartupToggle}
+                    disabled={startupToggling}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                      startupRegistered ? 'bg-brand-600' : 'bg-gray-200'
+                    } ${startupToggling ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      startupRegistered ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div>
-            <h3 className="text-sm font-bold text-gray-900 mb-1">리소스 제한</h3>
-            <p className="text-xs text-gray-500 mb-3">
-              On-Device Agent의 최대 CPU/GPU 점유율 제한
-            </p>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <p className="text-xs text-gray-500 mb-1">최대 CPU 점유율</p>
-                <p className="text-xl font-bold text-gray-900">10%</p>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <p className="text-xs text-gray-500 mb-1">최대 GPU 점유율</p>
-                <p className="text-xl font-bold text-gray-900">10%</p>
+          {/* ── 고급 설정 ── */}
+          <div className="card space-y-6">
+            <h3 className="text-sm font-bold text-gray-900">고급 설정</h3>
+            <div>
+              <h4 className="text-sm font-bold text-gray-900 mb-1">캡처 간격 (초)</h4>
+              <p className="text-xs text-gray-500 mb-3">
+                화면 스크린샷 캡처 주기입니다. 높을수록 리소스를 덜 사용합니다.
+              </p>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={1}
+                  max={30}
+                  value={captureInterval}
+                  onChange={(e) => setCaptureInterval(Number(e.target.value))}
+                  className="flex-1"
+                />
+                <span className="text-sm font-bold text-brand-600 w-12 text-right">
+                  {captureInterval}초
+                </span>
               </div>
             </div>
-          </div>
 
-          <div>
-            <h3 className="text-sm font-bold text-gray-900 mb-1">AI 모델</h3>
-            <p className="text-xs text-gray-500 mb-3">
-              현재 사용 중인 On-Device 비전 모델
-            </p>
-            <div className="p-3 bg-brand-50 rounded-xl flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-brand-700">MobileNetV3 + TinyVLM (INT8 Quantized)</p>
-                <p className="text-xs text-gray-500">TensorRT 최적화 | 모델 크기: 45MB</p>
+            <div>
+              <h4 className="text-sm font-bold text-gray-900 mb-1">리소스 제한</h4>
+              <p className="text-xs text-gray-500 mb-3">
+                On-Device Agent의 최대 CPU/GPU 점유율 제한
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-gray-50 rounded-xl">
+                  <p className="text-xs text-gray-500 mb-1">최대 CPU 점유율</p>
+                  <p className="text-xl font-bold text-gray-900">10%</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-xl">
+                  <p className="text-xs text-gray-500 mb-1">최대 GPU 점유율</p>
+                  <p className="text-xl font-bold text-gray-900">10%</p>
+                </div>
               </div>
-              <button className="btn-ghost flex items-center gap-1 text-xs">
-                업데이트 확인
-              </button>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-bold text-gray-900 mb-1">AI 모델</h4>
+              <p className="text-xs text-gray-500 mb-3">
+                현재 사용 중인 On-Device 비전 모델
+              </p>
+              <div className="p-3 bg-brand-50 rounded-xl flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-brand-700">MobileNetV3 + TinyVLM (INT8 Quantized)</p>
+                  <p className="text-xs text-gray-500">TensorRT 최적화 | 모델 크기: 45MB</p>
+                </div>
+                <button className="btn-ghost flex items-center gap-1 text-xs">
+                  업데이트 확인
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 프라이버시 설정 */}
+      {/* 프라이버시 설정 */
       {activeTab === 'privacy' && (
         <div className="card space-y-6">
           <div className="p-4 bg-success-50 rounded-xl border border-success-200">

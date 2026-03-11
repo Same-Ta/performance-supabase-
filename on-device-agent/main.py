@@ -2,7 +2,7 @@
 ProofWork On-Device Agent — 실제 구동 버전
 
 Windows에서 활성 윈도우를 추적하여 앱별 사용시간을 측정하고,
-성과 메트릭을 계산하여 Firebase에 전송합니다.
+성과 메트릭을 계산하여 Supabase에 전송합니다.
 
 사용법:
   python main.py                          # 인터랙티브 모드
@@ -38,8 +38,8 @@ logger = structlog.get_logger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="ProofWork On-Device Agent")
-    parser.add_argument("--email", help="Firebase 로그인 이메일")
-    parser.add_argument("--password", help="Firebase 로그인 비밀번호")
+    parser.add_argument("--email", help="Supabase 로그인 이메일")
+    parser.add_argument("--password", help="Supabase 로그인 비밀번호")
     parser.add_argument("--duration", type=int, default=0, help="자동 종료 시간 (분, 0=수동종료)")
     parser.add_argument("--interval", type=float, default=3.0, help="추적 간격 (초, 기본 3)")
     args = parser.parse_args()
@@ -51,9 +51,9 @@ def main():
     print("=" * 56)
     print()
 
-    # ─── 1단계: Firebase 로그인 ─────────────
-    from firebase_client import FirebaseClient
-    client = FirebaseClient()
+    # ─── 1단계: Supabase 로그인 ─────────────
+    from supabase_client import SupabaseClient
+    client = SupabaseClient()
 
     if client.is_authenticated:
         print(f"  ✅ 기존 세션 유지 (사용자: {client.user_id[:8]}...)")
@@ -174,8 +174,8 @@ def main():
 
     print("\n" + "=" * 56)
 
-    # ─── 5단계: Firebase 전송 ─────────────
-    print("\n  📤 Firebase에 메트릭 전송 중...")
+    # ─── 5단계: Supabase 전송 ─────────────
+    print("\n  📤 Supabase에 메트릭 전송 중...")
     if client.submit_metrics(metrics):
         print("  ✅ 전송 완료! 프론트엔드 대시보드에서 확인하세요.")
     else:

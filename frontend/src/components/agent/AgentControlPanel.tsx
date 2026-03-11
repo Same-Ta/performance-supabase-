@@ -470,6 +470,12 @@ export default function AgentControlPanel({ onSessionEnd }: Props) {
             <p className="text-xs text-blue-500">
               로컬 에이전트 없이도 마우스·키보드 입력으로 업무 시간을 즉시 추적합니다.
             </p>
+            <a
+              href="/settings"
+              className="text-xs font-medium text-blue-700 hover:text-blue-900 hover:underline mt-1.5 inline-block"
+            >
+              On-Device Agent 설치 →
+            </a>
           </div>
         )}
 

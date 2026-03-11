@@ -3,7 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import { supabase } from '../config/supabase';
 import type { UserProfile, UserRole } from '../types';
 
-// Firebase의 user.uid 를 유지하기 위한 호환 타입
+// Supabase user.id 를 uid 별칭으로 유지하는 호환 타입
 export interface AppUser extends User {
   uid: string; // User.id 의 별칭 (하위 호환)
 }

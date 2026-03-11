@@ -103,7 +103,7 @@ export default function ManualTimeEntry({ onEntryAdded }: ManualTimeEntryProps) 
     setEntries(prev => prev.filter(e => e.id !== id));
   };
 
-  // Firestore에 저장
+  // Supabase에 저장
   const handleSave = async () => {
     if (!profile?.uid || entries.length === 0) return;
     setSaving(true);

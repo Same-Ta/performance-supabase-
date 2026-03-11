@@ -49,9 +49,9 @@ class AgentConfig(BaseModel):
     screen_analysis_max_dim: int = 1024              # 서브이미지 최대 치수 (px)
     screen_analysis_enabled: bool = True             # 화면 분석 활성화 여부
 
-    # ─── Firebase 동기화 ────────────────────
-    firebase_credentials_path: str = str(BASE_DIR / "service-account-key.json")
-    firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID", "")
+    # ─── Supabase 동기화 ────────────────────
+    supabase_url: str = os.getenv("SUPABASE_URL", "")
+    supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "")
     sync_interval_sec: float = 300.0        # 서버 동기화 간격 (5분)
 
     # ─── 소프트웨어 분류 맵 ─────────────────

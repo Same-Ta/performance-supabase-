@@ -74,7 +74,7 @@ export function useGoalAlignment() {
   const [alignments, setAlignments] = useState<GoalAlignmentDetail[]>([]);
 
   useEffect(() => {
-    // TODO: Firestore goals 컬렉션 연동 후 대체
+    // TODO: Supabase goals 테이블 연동 후 대체
     setAlignments([
       {
         goalId: 'goal-1',

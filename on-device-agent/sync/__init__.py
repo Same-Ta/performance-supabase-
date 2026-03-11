@@ -1,3 +1,3 @@
-from .firebase_sync import FirebaseSync
+from .supabase_sync import SupabaseSync
 
-__all__ = ["FirebaseSync"]
+__all__ = ["SupabaseSync"]

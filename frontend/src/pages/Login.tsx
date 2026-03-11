@@ -112,12 +112,13 @@ export default function Login() {
       setSignupSuccess(true);
       setTimeout(() => navigate('/dashboard', { replace: true }), 2000);
     } catch (err: unknown) {
-      const firebaseError = err as { code?: string };
-      if (firebaseError.code === 'auth/email-already-in-use') {
+      const authError = err as { message?: string; status?: number };
+      const msg = authError.message || '';
+      if (msg.includes('already registered') || msg.includes('already been registered')) {
         setError('이미 가입된 이메일입니다. 로그인해주세요.');
-      } else if (firebaseError.code === 'auth/weak-password') {
+      } else if (msg.includes('weak') || msg.includes('password')) {
         setError('비밀번호가 너무 약합니다. 8자 이상으로 설정해주세요.');
-      } else if (firebaseError.code === 'auth/invalid-email') {
+      } else if (msg.includes('email') || msg.includes('invalid')) {
         setError('올바른 이메일 형식을 입력해주세요.');
       } else {
         setError('회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
