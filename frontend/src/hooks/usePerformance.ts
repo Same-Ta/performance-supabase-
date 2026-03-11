@@ -153,6 +153,7 @@ export function useDataReview(userId: string) {
       }
     }
 
+    if (!userId) { setLoading(false); return; }
     fetchData();
     return () => { cancelled = true; };
   }, [userId]);
@@ -250,6 +251,8 @@ export function usePerformanceReport(userId: string, userName: string) {
       }
     }
 
+    if (!userId) { setLoading(false); return; }
+    if (!userId) { setLoading(false); return; }
     fetchData();
     return () => { cancelled = true; };
   }, [userId, userName]);
@@ -302,6 +305,7 @@ export function useRewardStatus(userId: string) {
       }
     }
 
+    if (!userId) { setLoading(false); return; }
     fetchData();
     return () => { cancelled = true; };
   }, [userId]);
@@ -343,6 +347,7 @@ export function useDetailedReport(userId: string, userName: string) {
       }
     }
 
+    if (!userId) { setLoading(false); return; }
     fetchAndAnalyze();
     return () => { cancelled = true; };
   }, [userId]);

@@ -39,7 +39,8 @@ export default function UserStatistics() {
         if (!cancelled) setLoading(false);
       }
     }
-    if (userId) load();
+    if (!userId) { setLoading(false); return; }
+    load();
     return () => { cancelled = true; };
   }, [userId]);
 

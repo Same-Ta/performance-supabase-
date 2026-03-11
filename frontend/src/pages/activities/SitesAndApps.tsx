@@ -65,7 +65,8 @@ export default function SitesAndApps() {
         if (!cancelled) setLoading(false);
       }
     }
-    if (userId) load();
+    if (!userId) { setLoading(false); return; }
+    load();
     return () => { cancelled = true; };
   }, [userId]);
 
