@@ -17,9 +17,7 @@ type Tab = 'agent' | 'privacy' | 'integrations' | 'notifications' | 'profile' | 
 const validTabs: Tab[] = ['agent', 'privacy', 'integrations', 'notifications', 'profile', 'subscription'];
 
 const AGENT_URL = 'http://localhost:5001';
-const AGENT_DOWNLOAD_URL =
-  (import.meta.env.VITE_AGENT_DOWNLOAD_URL as string | undefined) ??
-  'https://github.com/raonpl/proofwork-agent/releases/latest/download/ProofWorkAgent.exe';
+const AGENT_DOWNLOAD_URL = 'https://jdukwvlasmphsiojqmwv.supabase.co/storage/v1/object/public/downloads/ProofWorkAgent.exe';
 
 export default function Settings() {
   const { profile, updateProfileData } = useAuth();
