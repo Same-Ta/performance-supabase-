@@ -83,39 +83,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('uid', uid)
         .single();
 
-      if (error || !data) {
-        // 프로필이 없으면 실제 유저 정보로 생성
-        let userEmail = '';
-        let userName = '사용자';
-        try {
-          const { data: authUser } = await supabase.auth.getUser();
-          userEmail = authUser.user?.email || '';
-          userName = authUser.user?.user_metadata?.display_name || '사용자';
-        } catch {
-          // auth 조회 실패해도 진행
-        }
-        const newProfile: UserProfile = {
-          uid,
-          email: userEmail,
-          displayName: userName,
-          role: 'employee',
-          department: '',
-          teamId: '',
-          position: '',
-          joinDate: new Date().toISOString().split('T')[0],
-          agentConnected: false,
-        };
-        try {
-          await supabase.from('profiles').upsert(newProfile);
-        } catch {
-          // upsert 실패해도 로컬 프로필은 사용
-        }
-        setProfile(newProfile);
-      } else {
+      if (data) {
+        // 정상 조회
         setProfile(data as UserProfile);
+        return;
       }
+
+      // PGRST116 = 행 없음 (프로필 미생성 상태) → 신규 생성
+      // 그 외 오류(RLS, 네트워크 등) → 기존 DB 데이터를 절대 덮어쓰지 않음
+      if (error?.code !== 'PGRST116') {
+        console.warn('[AuthContext] 프로필 조회 실패 (DB 덮어쓰기 차단):', error?.code, error?.message);
+        setProfile(null);
+        return;
+      }
+
+      // 프로필이 진짜 없는 경우에만 신규 생성
+      let userEmail = '';
+      let userName = '사용자';
+      try {
+        const { data: authUser } = await supabase.auth.getUser();
+        userEmail = authUser.user?.email || '';
+        userName = authUser.user?.user_metadata?.display_name || '사용자';
+      } catch {
+        // auth 조회 실패해도 진행
+      }
+      const newProfile: UserProfile = {
+        uid,
+        email: userEmail,
+        displayName: userName,
+        role: 'employee',
+        department: '',
+        teamId: '',
+        position: '',
+        joinDate: new Date().toISOString().split('T')[0],
+        agentConnected: false,
+      };
+      try {
+        await supabase.from('profiles').upsert(newProfile);
+      } catch {
+        // upsert 실패해도 로컬 프로필은 사용
+      }
+      setProfile(newProfile);
     } catch {
-      // 프로필 로딩 실패 시 null 유지 (데모 프로필 폴백 제거)
       setProfile(null);
     } finally {
       setLoading(false);
