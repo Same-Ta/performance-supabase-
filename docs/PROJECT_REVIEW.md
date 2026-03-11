@@ -430,7 +430,24 @@ FIREBASE_PROJECT_ID=performance-23a03                         # 기본값 하드
 
 ## 9. 실행 가이드
 
-### 프론트엔드
+### 한번에 실행 (PowerShell)
+
+프로젝트 루트에서 아래 명령으로 **프론트엔드 + Agent 서버**를 동시에 실행합니다:
+
+```powershell
+# 프로젝트 루트에서 실행
+cd frontend; npm install; Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; npm run dev"
+cd ..\on-device-agent; pip install -r requirements.txt; Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; $env:PYTHONIOENCODING='utf-8'; python server.py"
+```
+
+또는 **VS Code Tasks** 활용 (`.vscode/tasks.json` 설정 포함):
+1. `Ctrl+Shift+P` → `Tasks: Run Task`
+2. `Frontend: Dev Server` 선택 → 프론트엔드 시작 (http://localhost:3000)
+3. `Agent: Server` 선택 → Python Agent API 서버 시작 (http://localhost:5001)
+
+### 개별 실행
+
+#### 프론트엔드 (React + Vite)
 
 ```bash
 cd frontend
@@ -438,31 +455,30 @@ npm install
 npm run dev          # http://localhost:3000 (Vite 개발 서버)
 ```
 
-- Firebase 환경 변수 없이도 **데모 모드**로 동작 (로그인 페이지에서 역할 선택)
+- Supabase 환경 변수 없이도 **데모 모드**로 동작 (로그인 페이지에서 역할 선택)
 - Gemini API 없으면 AI 요약에 fallback 텍스트 표시
 
-### 백엔드 (Firebase Functions 에뮬레이터)
+#### 백엔드 (Supabase)
+
+데이터 CRUD는 **Supabase PostgREST**를 통해 프론트엔드에서 직접 호출합니다.
+서버사이드 로직은 `backend/supabase/functions/` 의 Edge Functions로 처리됩니다.
+
+Firebase Cloud Functions (`backend/functions/src/index.ts`)는 **DEPRECATED** 상태이며, 레거시 호환용으로만 유지됩니다.
 
 ```bash
+# (선택) Firebase Functions 에뮬레이터 — 레거시 함수 테스트 시
 cd backend/functions
 npm install
 npm run build                              # TypeScript → JavaScript 빌드
-
 cd ..
-firebase emulators:start --only functions  # 에뮬레이터 시작 (포트 5002)
+firebase emulators:start --only functions  # 에뮬레이터 시작 (포트 5003)
 ```
 
-- `firebase login` 없이도 `--only functions`로 기본 실행 가능
-- Firestore 에뮬레이터 없으면 `onPerformanceSubmit`(Firestore trigger) 무시
-- PubSub 에뮬레이터 없으면 `aggregateTeamDashboard`(Scheduler) 무시
-- HTTP 함수 3개(`syncJira`, `sendSlackNotification`, `mapMetricsToGoals`)는 정상 작동
-
-### On-Device Agent
+#### On-Device Agent (Python)
 
 ```bash
 cd on-device-agent
-pip install -r requirements.txt
-pip install flask flask-cors             # server.py 실행 시 추가 필요
+pip install -r requirements.txt          # flask, flask-cors 포함됨
 
 python main.py                           # CLI 모드
 python server.py                         # HTTP 서버 모드 (localhost:5001)
@@ -470,7 +486,32 @@ python server.py                         # HTTP 서버 모드 (localhost:5001)
 
 - **Windows 전용** (win32gui 의존)
 - Python 3.10+ 필요
-- `.env` 파일에 `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID` 설정 권장
+
+### 환경 변수 설정
+
+#### 프론트엔드 (`frontend/.env`)
+
+```
+VITE_SUPABASE_URL=              # Supabase 프로젝트 URL
+VITE_SUPABASE_ANON_KEY=         # Supabase anon/public 키
+VITE_GEMINI_API_KEY=            # (선택) Gemini AI API 키
+```
+
+#### On-Device Agent (`on-device-agent/.env`)
+
+```
+SUPABASE_URL=                   # Supabase 프로젝트 URL
+SUPABASE_ANON_KEY=              # Supabase anon/public 키
+GEMINI_API_KEY=                 # (선택) AI 화면 분석용
+```
+
+### 배포
+
+| 대상 | 플랫폼 | 설정 파일 |
+|------|--------|-----------|
+| 프론트엔드 | Vercel | `vercel.json` |
+| Agent 서버 | Render | `render.yaml` |
+| DB / Auth / Edge Functions | Supabase Cloud | `backend/supabase/` |
 
 ---
 

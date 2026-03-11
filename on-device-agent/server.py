@@ -236,10 +236,13 @@ def startup_unregister():
         return jsonify({"ok": False, "message": "Windows 전용 기능입니다."}), 400
     except Exception as e:
         return jsonify({"ok": False, "message": str(e)}), 500
+
+
+if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5001))
     host = os.environ.get("HOST", "0.0.0.0" if os.environ.get("PORT") else "localhost")
-    
+
     print()
     print("=" * 52)
     print("  ProofWork Agent Server")

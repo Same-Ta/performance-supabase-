@@ -99,7 +99,7 @@ export default function Settings() {
         setAgentOnline(false);
       }
     };
-    // Settings 탭에 있을 때만 충 확인, 이후 10초 간격 폴링
+    // Settings 탭에 있을 때만 확인, 이후 10초 간격 폴링
     if (activeTab !== 'agent') return;
     check();
     const id = setInterval(check, 10000);
